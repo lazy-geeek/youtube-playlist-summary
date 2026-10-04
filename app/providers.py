@@ -292,6 +292,18 @@ class OpenRouter:
         except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
             raise Temporary('Modellantwort ungültig oder Verbindung unterbrochen.')
 
+    def summarize_video(self, title, transcript):
+        summary = self.call('Fasse die wesentlichen Aspekte des folgenden YouTube-Videos auf Deutsch zusammen.\n\n'
+            + 'Titel: ' + title + '\n\nTranskript:\n' + transcript
+            + '\n\nSchreibe direkte Themen und Fakten ohne Sprecherformulierungen. '
+            'Keine allgemeine Einleitung oder Gesamtüberblick. Verwende bei Bedarf kurze Absätze, '
+            'Stichpunkte und Zwischenüberschriften. Empfehlungen und Unsicherheit kenntlich machen. '
+            'Keine Originalzitate oder Video-IDs im Fließtext nötig; der Video-Link steht separat. '
+            'Keine URLs erfinden. Gib ausschließlich die Zusammenfassung als Markdown zurück.', json_output=False)
+        if not isinstance(summary, str) or len(summary.split()) < 20:
+            raise Temporary('Keine verwertbare Video-Zusammenfassung erhalten.')
+        return summary
+
     def extract(self, video_id, text, metadata):
         chunks = [text[i:i+18000] for i in range(0, len(text), 17500)]
         findings, resources = [], []

@@ -1,6 +1,6 @@
 # Playlist Briefing
 
-Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start auswertet und einen deutschsprachigen, thematisch zusammengeführten Bericht erstellt. Statt einzelner Videozusammenfassungen entstehen lesbare Themenabschnitte mit gespeichertem Lesefortschritt.
+Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start auswertet und deutschsprachige Zusammenfassungen pro Video erstellt. Jedes Video erhält eine eigene deutsche Zusammenfassung seiner wesentlichen Aspekte aus Titel und vollständigem Transkript, mit eigenem Lesestatus.
 
 ## Funktionen
 

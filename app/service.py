@@ -59,6 +59,7 @@ class Service:
         self.store.claim('report')
         # Snapshot excludes all credentials; destination IDs remain immutable per run.
         snapshot = {k: c.get(k, '') for k in ('source','archive','unavailable','model','search_engine','transcript_mode','google_subject','max_videos')}
+        snapshot['format'] = 'per-video'
         try:
             run_id = self.store.execute('INSERT INTO runs(created,status,config) VALUES (?,?,?)', (now(),'running',json.dumps(snapshot)))
             self.store.execute('UPDATE work_lock SET run_id=? WHERE id=1', (run_id,))
@@ -80,31 +81,17 @@ class Service:
                 self.store.execute('INSERT INTO items(run_id,source_item,video_id,title) VALUES (?,?,?,?)',
                                    (run_id,e['source_item'],e['video_id'],e['title']))
             transcripts = Transcripts(c['transcript_mode'], self.directory)
-            all_findings, all_links = [], []
+            video_sections = []
             for item in self.store.run(run_id)['items']:
                 status, reason, evidence = 'temporary', '', {}
                 try:
                     text, origin = transcripts.fetch(item['video_id'])
-                    meta = yt.metadata(item['video_id'])
-                    comments, note = yt.comments(item['video_id'], meta['channel_id'])
-                    meta['creator_comments'] = comments
-                    allowed = source_urls(text + '\n' + meta['description'] + '\n' + '\n'.join(comments))
-                    findings, resources = llm.extract(item['video_id'], text, meta)
-                    # Also check exact links found in description, creator comments or transcript,
-                    # even if extractor failed to nominate them.
-                    named_urls = {r.get('url') for r in resources}
-                    for url in sorted(allowed - named_urls):
-                        resources.append({'name': urlsplit_name(url), 'url': url,
-                                          'context': meta['title'] + '\n' + meta['description'][:3000]})
-                    links = [Links(llm).verify(r, allowed) for r in resources]
-                    for f in findings:
-                        f['id'] = f"v{item['id']}-f{len(all_findings)}"
-                        all_findings.append(f)
-                    for link in links:
-                        link['video_id'] = item['video_id']
-                    all_links.extend(links)
-                    evidence = {'origin': origin, 'metadata': meta, 'comment_note': note,
-                                'findings': findings, 'resources': links}
+                    summary = llm.summarize_video(item['title'], text)
+                    summary = re.sub(r'^#{1,2} ', '### ', summary, flags=re.MULTILINE)
+                    body = 'Video-ID: ' + item['video_id'] + '\n\n' + summary
+                    video_sections.append((item['title'].replace('\n', ' '), body))
+                    evidence = {'origin': origin, 'summary': summary,
+                                'video_id': item['video_id'], 'title': item['title']}
                     status = 'success'
                 except Unavailable as exc:
                     status, reason = 'unavailable', str(exc)
@@ -116,11 +103,13 @@ class Service:
                 self.store.execute('UPDATE items SET status=?,reason=?,evidence=?,target=? WHERE id=?',
                                    (status,reason,json.dumps(evidence,ensure_ascii=False),target,item['id']))
             counts = self.store.run(run_id)['counts']
-            if all_findings:
-                markdown, provenance = self.synthesize(llm, all_findings, all_links)
-            else:
-                markdown = '# Playlist-Bericht\n\nEs konnte kein Video inhaltlich ausgewertet werden. Es wurde keine Zusammenfassung aus Titeln oder Beschreibungen erzeugt.\n'
-                provenance = []
+            markdown = '# Video-Zusammenfassungen\n'
+            for title, body in video_sections:
+                markdown += '\n## ' + title + '\n\n' + body + '\n'
+            provenance = [{'video_id': i['video_id'], 'title': i['title']}
+                          for i in self.store.run(run_id)['items'] if i['status'] == 'success']
+            if not video_sections:
+                markdown += '\nEs konnte kein Video inhaltlich ausgewertet werden.\n'
             markdown += (f"\n\n## Auswertung dieses Durchlaufs\n\n{counts['success']} Videos ausgewertet, "
                          f"{counts['unavailable']} sicher ohne verwertbare Untertitel, {counts['temporary']} vorübergehend fehlgeschlagen. "
                          'Fehlgeschlagene Videos bleiben für einen späteren Versuch in der Quelle.\n')
