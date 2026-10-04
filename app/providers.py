@@ -161,11 +161,12 @@ def apify_transcript(video_id, directory):
         raise Temporary('APIFY_API_TOKEN fehlt in der Serverkonfiguration.')
     if actor != 'starvibe/youtube-video-transcript':
         raise Temporary('Für diesen Apify-Actor ist noch kein Transkriptadapter vorhanden.')
+    language = os.environ.get('APIFY_TRANSCRIPT_LANGUAGE', 'en').strip() or 'en'
     cache = directory / 'apify-transcripts' / (video_id + '.json')
     if cache.is_file():
         try:
             stored = json.loads(cache.read_text())
-            if stored['actor'] == actor:
+            if stored['actor'] == actor and stored.get('requested_language') == language:
                 return stored['text'], stored['origin']
         except (ValueError, KeyError):
             pass
@@ -175,7 +176,7 @@ def apify_transcript(video_id, directory):
             headers={'Authorization': 'Bearer ' + token},
             params={'timeout': 120, 'maxTotalChargeUsd': 0.02},
             json={'youtube_url': 'https://www.youtube.com/watch?v=' + video_id,
-                  'include_transcript_text': True}, timeout=150)
+                  'include_transcript_text': True, 'language': language}, timeout=150)
         response.raise_for_status()
         items = response.json()
         if not isinstance(items, list):
@@ -191,7 +192,7 @@ def apify_transcript(video_id, directory):
             raise Temporary('Apify-Transkript fehlt oder ist zu kurz für eine verlässliche Auswertung.')
         origin = 'apify:' + actor + ':' + str(item.get('selected_language') or item.get('language', 'unknown'))
         cache.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        cache.write_text(json.dumps({'actor': actor, 'text': text, 'origin': origin}, ensure_ascii=False))
+        cache.write_text(json.dumps({'actor': actor, 'requested_language': language, 'text': text, 'origin': origin}, ensure_ascii=False))
         cache.chmod(0o600)
         return text, origin
     except (httpx.HTTPError, ValueError, TypeError, KeyError):

@@ -7,7 +7,11 @@ from .providers import YouTube, Transcripts, OpenRouter, Links, Temporary, Unava
 
 
 def probe_config(config):
-    return {k: config.get(k, '') for k in ('source', 'transcript_mode', 'google_subject')}
+    result = {k: config.get(k, '') for k in ('source', 'transcript_mode', 'google_subject')}
+    if config.get('transcript_mode') == 'apify':
+        result['apify_actor'] = os.environ.get('APIFY_TRANSCRIPT_ACTOR', 'starvibe/youtube-video-transcript')
+        result['apify_language'] = os.environ.get('APIFY_TRANSCRIPT_LANGUAGE', 'en').strip() or 'en'
+    return result
 
 
 class Service:

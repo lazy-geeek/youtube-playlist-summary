@@ -13,6 +13,7 @@ def test_apify_transcript_cached_and_bound_to_video(tmp_path, monkeypatch):
         assert kw['headers']['Authorization'] == 'Bearer test-key'
         assert kw['params']['maxTotalChargeUsd'] == 0.02
         assert kw['json']['youtube_url'].endswith('abcdefghijk')
+        assert kw['json']['language'] == 'en'
         return Response()
     monkeypatch.setattr('app.providers.httpx.post', post)
     provider = Transcripts('apify',tmp_path)
