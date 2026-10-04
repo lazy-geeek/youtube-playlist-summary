@@ -133,7 +133,7 @@ def home(request:Request):
     s = request.app.state.store
     c = s.settings()
     return page(request,'home.html',configured=bool(os.environ.get('OPENROUTER_API_KEY')) and all(c.get(k) for k in ['source','archive','unavailable','model','refresh_token']),
-        google=bool(c.get('refresh_token')),tested=s.probe_ready(probe_config(c)),
+        max_videos=c.get('max_videos',''),google=bool(c.get('refresh_token')),tested=s.probe_ready(probe_config(c)),
         runs=s.query('SELECT * FROM runs ORDER BY id DESC LIMIT 6'))
 
 
