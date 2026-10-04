@@ -56,6 +56,8 @@ Die App ist unter `http://localhost:8765` erreichbar. Benutzername und Passwort 
 | `ENCRYPTION_KEY` | Fernet-Schlüssel für die verschlüsselte Speicherung von Google-Zugangsdaten |
 | `DATA_DIR` | Persistentes Datenverzeichnis; lokal `./data` |
 | `OPENROUTER_API_KEY` | OpenRouter-Schlüssel, ausschließlich über die Serverumgebung gesetzt |
+| `APIFY_API_TOKEN` | Apify-Key, ausschließlich über die Serverumgebung |
+| `APIFY_TRANSCRIPT_ACTOR` | Actor-ID; unterstützt: `starvibe/youtube-video-transcript` |
 | `SEARXNG_URL` | Basis-URL der eigenen SearXNG-Instanz; im Setup Suchdienst `searxng` wählen, JSON-API erforderlich |
 | `GOOGLE_ALLOWED_EMAIL` | Optionale Vorbelegung der berechtigten Google-Adresse im Setup |
 

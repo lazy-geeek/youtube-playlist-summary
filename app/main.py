@@ -161,7 +161,7 @@ def setup(request:Request):
     safe['google_allowed_email'] = safe['google_allowed_email'] or os.environ.get('GOOGLE_ALLOWED_EMAIL','')
     probes = s.query('SELECT * FROM probes ORDER BY id DESC LIMIT 1')
     return page(request,'setup.html',config=safe,google=bool(config.get('refresh_token')),
-        key_set=bool(os.environ.get('OPENROUTER_API_KEY')),secret_set=bool(config.get('google_client_secret')),
+        apify_set=bool(os.environ.get('APIFY_API_TOKEN')),key_set=bool(os.environ.get('OPENROUTER_API_KEY')),secret_set=bool(config.get('google_client_secret')),
         results=json.loads(probes[0]['results']) if probes else [],redirect_uri=APP_URL+'/oauth/callback',
         playlist_locked=bool(s.query('SELECT id FROM runs LIMIT 1')))
 
@@ -182,7 +182,7 @@ async def save_setup(request:Request):
                 values[key] = playlist
     if s.query('SELECT id FROM runs LIMIT 1') and any(values[k] != old.get(k) for k in ['source','archive','unavailable']):
         raise Temporary('Die festen Playlists können nach dem ersten Durchlauf nicht geändert werden.')
-    if values['transcript_mode'] not in ('import','public') or values['search_engine'] not in ('searxng','auto','exa','firecrawl','parallel','perplexity'):
+    if values['transcript_mode'] not in ('import','public','apify') or values['search_engine'] not in ('searxng','auto','exa','firecrawl','parallel','perplexity'):
         raise Temporary('Ungültige Transkript- oder Suchkonfiguration.')
     if values['google_allowed_email'] and '@' not in values['google_allowed_email']:
         raise Temporary('Eine gültige berechtigte Google-Adresse angeben.')

@@ -154,6 +154,50 @@ class CaptionSession(requests.Session):
         return super().request(*args, **kwargs)
 
 
+def apify_transcript(video_id, directory):
+    token = os.environ.get('APIFY_API_TOKEN', '')
+    actor = os.environ.get('APIFY_TRANSCRIPT_ACTOR', 'starvibe/youtube-video-transcript')
+    if not token:
+        raise Temporary('APIFY_API_TOKEN fehlt in der Serverkonfiguration.')
+    if actor != 'starvibe/youtube-video-transcript':
+        raise Temporary('Für diesen Apify-Actor ist noch kein Transkriptadapter vorhanden.')
+    cache = directory / 'apify-transcripts' / (video_id + '.json')
+    if cache.is_file():
+        try:
+            stored = json.loads(cache.read_text())
+            if stored['actor'] == actor:
+                return stored['text'], stored['origin']
+        except (ValueError, KeyError):
+            pass
+    try:
+        response = httpx.post('https://api.apify.com/v2/acts/' + actor.replace('/', '~')
+            + '/run-sync-get-dataset-items',
+            headers={'Authorization': 'Bearer ' + token},
+            params={'timeout': 120, 'maxTotalChargeUsd': 0.02},
+            json={'youtube_url': 'https://www.youtube.com/watch?v=' + video_id,
+                  'include_transcript_text': True}, timeout=150)
+        response.raise_for_status()
+        items = response.json()
+        if not isinstance(items, list):
+            raise ValueError('Invalid dataset')
+        item = next((i for i in items if isinstance(i, dict) and i.get('video_id') == video_id), None)
+        if not item or item.get('status') != 'success':
+            raise Temporary('Apify hat kein erfolgreiches Transkript geliefert; später erneut prüfen.')
+        text = item.get('transcript_text')
+        if not isinstance(text, str) or not text.strip():
+            text = '\n'.join(s['text'] for s in item.get('transcript', [])
+                             if isinstance(s, dict) and isinstance(s.get('text'), str))
+        if len(text.split()) < 40:
+            raise Temporary('Apify-Transkript fehlt oder ist zu kurz für eine verlässliche Auswertung.')
+        origin = 'apify:' + actor + ':' + str(item.get('selected_language') or item.get('language', 'unknown'))
+        cache.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        cache.write_text(json.dumps({'actor': actor, 'text': text, 'origin': origin}, ensure_ascii=False))
+        cache.chmod(0o600)
+        return text, origin
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        raise Temporary('Apify-Abruf fehlgeschlagen. Key, Guthaben und Actor in der Apify-Console prüfen. Keine automatische Wiederholung.')
+
+
 class Transcripts:
     def __init__(self, mode, directory):
         self.mode = mode
@@ -168,6 +212,8 @@ class Transcripts:
                 raise Temporary('Kein autorisiert importiertes Transkript vorhanden.')
             text = path.read_text(encoding='utf-8')
             origin = 'authorized-import'
+        elif self.mode == 'apify':
+            text, origin = apify_transcript(video_id, self.directory)
         elif self.mode == 'public':
             try:
                 with CaptionSession() as client:
