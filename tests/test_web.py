@@ -127,3 +127,16 @@ def test_setup_extracts_playlist_id_from_url(client):
         'search_engine':'auto', 'transcript_mode':'import'},headers={'Origin':'http://localhost:8765'})
     assert response.status_code == 200
     assert client.app.state.store.settings()['source'] == 'PLabcdefghijk'
+
+
+def test_google_oauth_redirect_allowed_by_csp(client):
+    authorize(client)
+    client.app.state.store.save_settings({'google_client_id':'client', 'google_client_secret':'secret',
+                                          'google_allowed_email':'reader@example.com'})
+    page = client.get('/setup')
+    assert "form-action 'self' https://accounts.google.com" in page.headers['content-security-policy']
+    response = client.post('/oauth/start', data={'csrf':csrf(client)},
+        headers={'Origin':'http://localhost:8765'}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers['location'].startswith('https://accounts.google.com/o/oauth2/v2/auth?')
+    assert "form-action 'self' https://accounts.google.com" in response.headers['content-security-policy']
