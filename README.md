@@ -10,7 +10,7 @@ Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start aus
 - Gemeinsame Auswertung thematischer Überschneidungen über mehrere Videos.
 - Geprüfte Ressourcenlinks und klar gekennzeichnete Unsicherheit.
 - Einzelne Leseabschnitte, dauerhafte Historie und vollständiger Markdown-Export.
-- Archivierung ausschließlich nach ausdrücklicher Bestätigung.
+- Automatische Archivierung nach erfolgreicher Erstellung und Speicherung des Briefings; der Lesestatus bleibt unabhängig.
 - Fortsetzbare Playlist-Operationen mit gespeichertem Fortschritt.
 - Benutzername/Passwort-Schutz, serverseitig verschlüsselte Google-Tokens und CSRF-Schutz.
 

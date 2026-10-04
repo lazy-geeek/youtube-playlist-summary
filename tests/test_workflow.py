@@ -123,12 +123,13 @@ def test_ambiguous_missing_destination_never_deletes_or_reinserts(store,tmp_path
     assert store.run(rid)['archive_status'] == 'partial'
 
 
-def test_unread_sections_block_archive(store,tmp_path):
+def test_unread_sections_allow_archive_without_changing_read_state(store,tmp_path):
     rid = make_run(store,read=False)
-    with pytest.raises(Temporary):
-        Service(store,tmp_path).confirm(rid)
-    assert store.run(rid)['confirmed'] is None
-    assert not store.query('SELECT * FROM work_lock')
+    service = Service(store,tmp_path)
+    service.confirm(rid)
+    assert store.run(rid)['confirmed'] is not None
+    assert store.run(rid)['unread'] > 0
+    store.release()
 
 
 def test_single_job_and_restart_recovery(store):
@@ -215,7 +216,9 @@ def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(stor
     assert result['sections'][0]['title'] == 'KI-Entwicklungen'
     assert {i['source_item'] for i in result['items']} == ({'item-a','item-b'} if expected == 2 else {'item-a'})
     assert json.loads(result['config'])['max_videos'] == limit
-    assert yt.inserts == yt.deletes == []
+    assert len(yt.inserts) == expected
+    assert result['archive_status'] == 'done'
+    assert result['unread'] == 2
     assert 'env-only-key' not in result['config']
     assert result['read_completed'] is None
 

@@ -149,6 +149,10 @@ class Service:
             llm.close()
             self.store.release()
 
+        if self.store.run(run_id)['status'] == 'ready':
+            self.confirm(run_id)
+            self.archive(run_id)
+
     def synthesize(self, llm, findings, links):
         valid = {f['id']: f for f in findings}
         # Hierarchical thematic reduction includes every successfully analysed video.
@@ -220,8 +224,6 @@ class Service:
         self.store.claim('archive', run_id)
         try:
             r = self.store.run(run_id)
-            if r['unread']:
-                raise Temporary('Bitte zuerst alle Leseabschnitte als gelesen markieren.')
             if r['status'] != 'ready':
                 raise Temporary('Nur fertige Berichte können bestätigt werden.')
             self.store.execute("UPDATE runs SET confirmed=COALESCE(confirmed,?),archive_status='running',error='' WHERE id=?", (now(),run_id))
