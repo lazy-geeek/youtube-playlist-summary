@@ -230,3 +230,19 @@ def test_search_without_tool_execution_cannot_return_candidate():
     try:
         with pytest.raises(Temporary): llm.call('Search',search=True)
     finally: llm.close()
+
+
+def test_final_synthesis_receives_original_quotes(store,tmp_path):
+    class LLM:
+        calls = 0
+        def call(self,prompt):
+            self.calls += 1
+            if self.calls == 1:
+                return {'sections':[{'title':name,'paragraphs':[{'text':'Belegt','finding_ids':[fid]}]}
+                    for name,fid in [('A','f1'),('B','f2')]]}
+            groups = json.loads(prompt.split('\n',1)[1])
+            assert groups[0]['source_findings'][0]['quote'] == 'Original A'
+            assert groups[1]['source_findings'][0]['quote'] == 'Original B'
+            return {'sections':[{'title':'Gesamtüberblick','paragraphs':[{'text':'Belegter Gesamtbericht','finding_ids':['f1','f2']}]}]}
+    findings = [{'id':'f1','video_id':'v1','quote':'Original A'},{'id':'f2','video_id':'v2','quote':'Original B'}]
+    assert 'Belegter Gesamtbericht' in Service(store,tmp_path).synthesize(LLM(),findings,[])[0]

@@ -162,12 +162,15 @@ class Service:
                 + json.dumps(batch,ensure_ascii=False))
             groups.extend(self.validate_sections(data,valid))
         if len(groups) > 1:
+            sourced_groups = [{**g, 'source_findings': [valid[fid] for fid in dict.fromkeys(
+                fid for p in g['paragraphs'] for fid in p['finding_ids'])]} for g in groups]
             data = llm.call('Erstelle einen eigenständig lesbaren deutschen GESAMTBERICHT. Beginne mit Gesamtüberblick. '
                 'Führe Überschneidungen zusammen, erläutere neue KI-Entwicklungen, Tools und Arbeitsweisen mit Nutzen, '
                 'Grenzen und Beispielen. Eigenständige Themen angemessen behandeln. Keine Einzelvideo-Liste, keine URLs, '
                 'Zeitmarken oder Markdown-Links. Meinungen und Unsicherheit ausdrücklich kennzeichnen. '
+                'Originalzitate und Video-IDs stehen in source_findings; verwende sie als Belege. '
                 'Erhalte den Inhalt ALLER gelieferten Gruppen. JSON {"sections":[{"title":"...",'
-                '"paragraphs":[{"text":"...","finding_ids":["..."]}]}]}.\n' + json.dumps(groups,ensure_ascii=False))
+                '"paragraphs":[{"text":"...","finding_ids":["..."]}]}]}.\n' + json.dumps(sourced_groups,ensure_ascii=False))
             groups = self.validate_sections(data,valid)
         if not groups:
             raise Temporary('Kein belegbarer Gesamtbericht erhalten.')
@@ -191,6 +194,8 @@ class Service:
                     continue
                 seen.add(identity)
                 name = clean_prose(r['name']).replace('[','').replace(']','').replace('\n',' ')
+                if not name.strip():
+                    continue
                 if r['verified']:
                     markdown += f"- [{name}](<{r['url']}>) — URL und Projektbezug geprüft.\n"
                 else:
