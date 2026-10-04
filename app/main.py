@@ -175,20 +175,18 @@ async def save_setup(request:Request):
     old = s.settings()
     values = {k:str(form.get(k,'')).strip() for k in ['source','archive','unavailable','model','search_engine','transcript_mode','google_client_id','google_allowed_email']}
     import re
-    ids = [values[k] for k in ['source','archive','unavailable']]
-    if len(set(ids)) != 3 or any(not re.fullmatch(r'[A-Za-z0-9_-]{10,100}',i) for i in ids):
-        raise Temporary('Drei unterschiedliche, gültige Playlist-IDs angeben.')
+    ids = [values[k] for k in ['source','archive','unavailable'] if values[k]]
+    if len(set(ids)) != len(ids) or any(not re.fullmatch(r'[A-Za-z0-9_-]{10,100}',i) for i in ids):
+        raise Temporary('Eingetragene Playlist-IDs müssen gültig und unterschiedlich sein.')
     if s.query('SELECT id FROM runs LIMIT 1') and any(values[k] != old.get(k) for k in ['source','archive','unavailable']):
         raise Temporary('Die festen Playlists können nach dem ersten Durchlauf nicht geändert werden.')
     if values['transcript_mode'] not in ('import','public') or values['search_engine'] not in ('auto','exa','firecrawl','parallel','perplexity'):
         raise Temporary('Ungültige Transkript- oder Suchkonfiguration.')
-    if not values['model'] or not values['google_client_id'] or '@' not in values['google_allowed_email']:
-        raise Temporary('Modell, Google-Client-ID und berechtigte Google-Adresse erforderlich.')
+    if values['google_allowed_email'] and '@' not in values['google_allowed_email']:
+        raise Temporary('Eine gültige berechtigte Google-Adresse angeben.')
     for k in ['google_client_secret']:
         if form.get(k):
             values[k] = str(form[k]).strip()
-        elif not old.get(k):
-            raise Temporary('Google-Client-Secret erforderlich.')
     if old.get('google_client_id') != values['google_client_id'] or old.get('google_allowed_email') != values['google_allowed_email']:
         values.update({'refresh_token':'','access_token':'','token_expires':'0','google_subject':''})
     s.save_settings(values)
@@ -198,7 +196,7 @@ async def save_setup(request:Request):
 @app.post('/oauth/start')
 def oauth_start(request:Request):
     c = request.app.state.store.settings()
-    if not c.get('google_client_id') or not c.get('google_allowed_email'):
+    if not all(c.get(k) for k in ('google_client_id','google_client_secret','google_allowed_email')):
         raise Temporary('Google-Zugang und berechtigte E-Mail zuerst im Setup speichern.')
     state = secrets.token_urlsafe(32)
     request.app.state.store.execute('UPDATE sessions SET oauth_state=? WHERE id=?',

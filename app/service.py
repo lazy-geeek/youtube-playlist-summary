@@ -18,6 +18,8 @@ class Service:
         self.llm_factory = llm_factory
 
     def check(self):
+        if not all(self.store.settings().get(k) for k in ('source', 'archive', 'unavailable', 'refresh_token')):
+            raise Temporary('Zuerst alle drei Playlists speichern und Google verbinden.')
         self.store.claim('probe')
         yt = self.youtube_factory(self.store)
         try:

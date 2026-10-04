@@ -95,3 +95,26 @@ def test_count_includes_all_current_playlist_entries(client,monkeypatch):
     import app.main
     monkeypatch.setattr(app.main,'YouTube',YT)
     assert client.get('/api/count').json() == {'total':2,'pending':2,'held':0}
+
+
+def test_partial_setup_saves_and_preserves_secret(client):
+    authorize(client)
+    s = client.app.state.store
+    s.save_settings({'google_client_secret':'saved-secret'})
+    fields = {'csrf':csrf(client), 'source':'PLabcdefghijk', 'google_client_id':'my-client',
+              'search_engine':'auto', 'transcript_mode':'import'}
+    response = client.post('/setup',data=fields,headers={'Origin':'http://localhost:8765'})
+    assert response.status_code == 200
+    assert s.settings()['source'] == 'PLabcdefghijk'
+    assert s.settings()['google_client_id'] == 'my-client'
+    assert s.settings()['google_client_secret'] == 'saved-secret'
+    assert 'input required' not in response.text
+    assert 'Google-Zugang' in client.post('/oauth/start',data={'csrf':csrf(client)},headers={'Origin':'http://localhost:8765'}).text
+
+
+def test_partial_setup_rejects_invalid_playlist(client):
+    authorize(client)
+    response = client.post('/setup',data={'csrf':csrf(client), 'source':'bad',
+        'search_engine':'auto', 'transcript_mode':'import'},headers={'Origin':'http://localhost:8765'})
+    assert 'gültig und unterschiedlich' in response.text
+    assert not client.app.state.store.settings().get('source')
