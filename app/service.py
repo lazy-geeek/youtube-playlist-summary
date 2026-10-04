@@ -160,6 +160,7 @@ class Service:
         for start in range(0, len(findings), 60):
             batch = findings[start:start+60]
             data = llm.call('Führe diese belegten Befunde thematisch zusammen. Ausreichend Substanz, Nutzen, Grenzen, '
+                'Direkte Themen und Fakten, keine Sprecherreferenzen oder Erzählrahmen. Empfehlungen und Unsicherheit kenntlich machen. '
                 'anschauliche Beispiele statt Klickanleitungen. Nur konkrete Themenblöcke, kein Gesamtüberblick. Keine Einzelvideo-Zusammenfassungen, keine URLs, '
                 'keine Zeitmarken. JSON {"sections":[{"title":"...","paragraphs":[{"text":"deutscher Text",'
                 '"finding_ids":["..."]}]}]}. Jeder Absatz muss belegende finding_ids aus den Daten enthalten.\n'
