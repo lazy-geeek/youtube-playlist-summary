@@ -275,6 +275,25 @@ def history(request:Request):
     return page(request,'history.html',runs=runs)
 
 
+def link_video_ids(html, items):
+    import re
+    ids = {i['video_id'] for i in items if re.fullmatch(r'[A-Za-z0-9_-]{11}', i['video_id'])}
+    if not ids:
+        return html
+    pattern = re.compile(r'(?<![A-Za-z0-9_-])(' + '|'.join(re.escape(v) for v in sorted(ids)) + r')(?![A-Za-z0-9_-])')
+    # Work on text nodes only; never replace existing link text or attributes.
+    parts = re.split(r'(<[^>]+>)', html)
+    in_link = False
+    for idx, part in enumerate(parts):
+        if part.startswith('<'):
+            if re.match(r'<a(?:\s|>)', part): in_link = True
+            elif part.startswith('</a'): in_link = False
+        elif not in_link:
+            parts[idx] = pattern.sub(lambda m: '<a href="https://www.youtube.com/watch?v=' + m[0]
+                + '" target="_blank" rel="noopener noreferrer">' + m[0] + '</a>', part)
+    return ''.join(parts)
+
+
 @app.get('/runs/{run_id}',response_class=HTMLResponse)
 def show_run(request:Request,run_id:int):
     try:
@@ -288,6 +307,8 @@ def show_run(request:Request,run_id:int):
         section['html'] = bleach.clean(MarkdownIt('commonmark',{'html':False}).render(section['markdown']),
             tags=['h1','h2','h3','p','ul','ol','li','strong','em','code','pre','blockquote','a','hr','br'],
             attributes={'a':['href','title']},protocols=['https'],strip=True)
+        section['html'] = link_video_ids(section['html'], r['items'])
+    rendered = link_video_ids(rendered, r['items'])
     return page(request,'report.html',run=r,rendered=rendered)
 
 
