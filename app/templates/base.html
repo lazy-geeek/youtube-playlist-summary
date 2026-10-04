@@ -1,0 +1,19 @@
+{% from 'icons.html' import icon %}
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>{% block title %}Playlist Briefing{% endblock %}</title><link rel="stylesheet" href="/static/style.css"><link rel="icon" href="/static/favicon.svg"><script defer src="/static/app.js"></script></head>
+<body><a class="skip-link" href="#main">Zum Inhalt</a>
+<aside class="sidebar">
+  <a class="brand" href="/" aria-label="Playlist Briefing Startseite"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>playlist<span class="brand-second">briefing<span class="brand-period">.</span></span></span></a>
+  <div class="workspace-label">DEIN ARBEITSBEREICH</div>
+  <nav aria-label="Hauptnavigation">
+    {% for href,label,glyph in [('/','Überblick','grid'),('/history','Historie','book'),('/setup','Setup','sliders')] %}
+    {% set active = request.url.path == href or (href == '/history' and request.url.path.startswith('/runs/')) %}
+    <a class="nav-link {{ 'active' if active else '' }}" href="{{ href }}" {% if active %}aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span>{% if active %}<span class="nav-indicator" aria-hidden="true"></span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  <div class="sidebar-bottom"><div class="privacy-mark">{{ icon('lock') }}</div><div><strong>Dein privates Briefing</strong><span>Ein geschützter Leseraum.</span></div></div>
+</aside>
+<div class="app-shell"><header class="topbar"><div class="breadcrumb"><span>Arbeitsbereich</span><span class="crumb-divider">/</span><strong>{{ 'Setup' if request.url.path == '/setup' else 'Historie' if request.url.path == '/history' else 'Briefing' if request.url.path.startswith('/runs/') else 'Überblick' }}</strong></div><span class="private-badge">{{ icon('lock') }}Privat</span></header>
+<main id="main">{% if busy %}<div class="notice">{{ icon('refresh','spin') }}<span>Ein Durchlauf oder eine Archivierung ist aktiv. Weitere Starts sind gesperrt.</span></div>{% endif %}{% block content %}{% endblock %}</main>
+<footer><span>Playlist Briefing</span><span>Manuell gestartet. Bewusst gelesen.</span></footer></div>
+</body></html>

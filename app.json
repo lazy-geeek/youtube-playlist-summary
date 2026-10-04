@@ -1,0 +1,25 @@
+{
+  "name": "Playlist Briefing",
+  "description": "Private YouTube playlist reports",
+  "formation": {
+    "web": {
+      "quantity": 1
+    }
+  },
+  "healthchecks": {
+    "web": [
+      {
+        "type": "startup",
+        "name": "http-authenticated",
+        "attempts": 10,
+        "wait": 5,
+        "timeout": 5,
+        "command": [
+          "python",
+          "-c",
+          "import os,urllib.request,base64; r=urllib.request.Request('http://127.0.0.1:8000/health'); r.add_header('Authorization','Basic '+base64.b64encode((os.environ['APP_USERNAME']+':'+os.environ['APP_PASSWORD']).encode()).decode()); assert urllib.request.urlopen(r).status==200"
+        ]
+      }
+    ]
+  }
+}
