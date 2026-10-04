@@ -148,3 +148,5 @@ Die Tests prüfen Zugriffsschutz, CSRF, Secret-Ausgabe, HTML-Sanitizing, gespeic
 - [OpenRouter Websuche](https://openrouter.ai/docs/guides/features/server-tools/web-search)
 
 Bei Auswahl von SearXNG sucht die App über dessen `/search?format=json`-API. Nur URLs aus den tatsächlichen Treffern werden als Kandidaten zugelassen und anschließend unabhängig geprüft. Es gibt keinen automatischen Rückfall auf kostenpflichtige OpenRouter-Websuche. OpenRouter bleibt für die Textauswertung zuständig.
+
+Im Setup kann die maximale Videoanzahl pro Lauf gesetzt werden. Leer bedeutet alle Videos. Die ersten N Einträge in Playlist-Reihenfolge bilden den Snapshot; weitere Einträge bleiben in der Quelle. Das Limit wird im Lauf gespeichert und begrenzt auch die spätere Archivierung auf dessen Snapshot.

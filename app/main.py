@@ -157,7 +157,7 @@ def count(request:Request):
 def setup(request:Request):
     s = request.app.state.store
     config = s.settings()
-    safe = {k:config.get(k,'') for k in ['source','archive','unavailable','model','search_engine','transcript_mode','google_client_id','google_allowed_email']}
+    safe = {k:config.get(k,'') for k in ['source','archive','unavailable','model','search_engine','transcript_mode','google_client_id','google_allowed_email','max_videos']}
     safe['google_allowed_email'] = safe['google_allowed_email'] or os.environ.get('GOOGLE_ALLOWED_EMAIL','')
     probes = s.query('SELECT * FROM probes ORDER BY id DESC LIMIT 1')
     return page(request,'setup.html',config=safe,google=bool(config.get('refresh_token')),
@@ -173,7 +173,15 @@ async def save_setup(request:Request):
     if s.query('SELECT * FROM work_lock'):
         raise Busy('Setup während eines Durchlaufs gesperrt.')
     old = s.settings()
-    values = {k:str(form.get(k,'')).strip() for k in ['source','archive','unavailable','model','search_engine','transcript_mode','google_client_id','google_allowed_email']}
+    values = {k:str(form.get(k,'')).strip() for k in ['source','archive','unavailable','model','search_engine','transcript_mode','google_client_id','google_allowed_email','max_videos']}
+    if values['max_videos']:
+        try:
+            limit = int(values['max_videos'])
+        except ValueError:
+            raise Temporary('Maximale Videoanzahl muss eine ganze Zahl sein.')
+        if not 1 <= limit <= 10000:
+            raise Temporary('Maximale Videoanzahl muss zwischen 1 und 10000 liegen; leer bedeutet alle.')
+        values['max_videos'] = str(limit)
     for key in ('source', 'archive', 'unavailable'):
         parsed = urlsplit(values[key])
         if parsed.hostname in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'):

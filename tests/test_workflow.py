@@ -178,10 +178,11 @@ def test_extract_rejects_fabricated_quotes():
     finally: llm.close()
 
 
-def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(store,tmp_path,monkeypatch):
+@pytest.mark.parametrize('limit,expected', [('',2), ('1',1)])
+def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(store,tmp_path,monkeypatch,limit,expected):
     monkeypatch.setenv('OPENROUTER_API_KEY','env-only-key')
     config = {'source':'source','archive':'archive','unavailable':'rejects','google_subject':'owner',
-              'model':'test/model','search_engine':'auto','transcript_mode':'import','refresh_token':'refresh'}
+              'model':'test/model','search_engine':'auto','transcript_mode':'import','refresh_token':'refresh','max_videos':limit}
     store.save_settings(config)
     store.execute('INSERT INTO probes(created,config,results,success) VALUES (?,?,?,1)',
         (now(),json.dumps(probe_config(config)),'[]'))
@@ -209,10 +210,11 @@ def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(stor
     service.generate(rid,c)
     result = store.run(rid)
     assert result['status'] == 'ready'
-    assert result['counts']['success'] == 2
+    assert result['counts']['success'] == expected
     assert result['unread'] == 2
     assert result['sections'][0]['title'] == 'KI-Entwicklungen'
-    assert {i['source_item'] for i in result['items']} == {'item-a','item-b'}
+    assert {i['source_item'] for i in result['items']} == ({'item-a','item-b'} if expected == 2 else {'item-a'})
+    assert json.loads(result['config'])['max_videos'] == limit
     assert yt.inserts == yt.deletes == []
     assert 'env-only-key' not in result['config']
     assert result['read_completed'] is None

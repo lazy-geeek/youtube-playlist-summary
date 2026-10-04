@@ -58,7 +58,7 @@ class Service:
             raise Temporary('Zuerst einen erfolgreichen Transkripttest mit echten Playlist-Videos durchführen.')
         self.store.claim('report')
         # Snapshot excludes all credentials; destination IDs remain immutable per run.
-        snapshot = {k: c.get(k, '') for k in ('source','archive','unavailable','model','search_engine','transcript_mode','google_subject')}
+        snapshot = {k: c.get(k, '') for k in ('source','archive','unavailable','model','search_engine','transcript_mode','google_subject','max_videos')}
         try:
             run_id = self.store.execute('INSERT INTO runs(created,status,config) VALUES (?,?,?)', (now(),'running',json.dumps(snapshot)))
             self.store.execute('UPDATE work_lock SET run_id=? WHERE id=1', (run_id,))
@@ -72,6 +72,8 @@ class Service:
         try:
             yt.validate_playlists([c[k] for k in ('source','archive','unavailable')])
             entries = yt.entries(c['source'])
+            if c.get('max_videos'):
+                entries = entries[:int(c['max_videos'])]
             if not entries:
                 raise Temporary('Quell-Playlist ist leer.')
             for e in entries:
