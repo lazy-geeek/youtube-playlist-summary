@@ -112,9 +112,18 @@ def test_partial_setup_saves_and_preserves_secret(client):
     assert 'Google-Zugang' in client.post('/oauth/start',data={'csrf':csrf(client)},headers={'Origin':'http://localhost:8765'}).text
 
 
-def test_partial_setup_rejects_invalid_playlist(client):
+def test_partial_setup_saves_draft_playlist(client):
     authorize(client)
     response = client.post('/setup',data={'csrf':csrf(client), 'source':'bad',
         'search_engine':'auto', 'transcript_mode':'import'},headers={'Origin':'http://localhost:8765'})
-    assert 'gültig und unterschiedlich' in response.text
-    assert not client.app.state.store.settings().get('source')
+    assert response.status_code == 200
+    assert client.app.state.store.settings()['source'] == 'bad'
+
+
+def test_setup_extracts_playlist_id_from_url(client):
+    authorize(client)
+    response = client.post('/setup',data={'csrf':csrf(client),
+        'source':'https://www.youtube.com/playlist?list=PLabcdefghijk&index=1',
+        'search_engine':'auto', 'transcript_mode':'import'},headers={'Origin':'http://localhost:8765'})
+    assert response.status_code == 200
+    assert client.app.state.store.settings()['source'] == 'PLabcdefghijk'

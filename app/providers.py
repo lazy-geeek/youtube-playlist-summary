@@ -84,6 +84,11 @@ class YouTube:
                 return values[:limit] if limit else values
 
     def validate_playlists(self, ids):
+        if len(ids) != 3 or len(set(ids)) != 3:
+            raise Temporary('Für Quelle, Archiv und Nicht auswertbar drei unterschiedliche Playlists eintragen.')
+        for label, value in zip(('Quelle', 'Archiv', 'Nicht auswertbar'), ids):
+            if not re.fullmatch(r'[A-Za-z0-9_-]{10,100}', value):
+                raise Temporary(f'Playlist {label}: gültige Playlist-ID oder YouTube-Link im Setup eintragen.')
         data = self.request('GET', 'playlists', params={'part': 'snippet,status', 'id': ','.join(ids)})
         if {p['id'] for p in data['items']} != set(ids):
             raise Temporary('Nicht alle drei Playlists sind für dieses Google-Konto zugänglich.')

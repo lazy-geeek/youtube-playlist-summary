@@ -9,7 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, parse_qs
 import bleach
 import httpx
 from dotenv import load_dotenv
@@ -174,10 +174,12 @@ async def save_setup(request:Request):
         raise Busy('Setup während eines Durchlaufs gesperrt.')
     old = s.settings()
     values = {k:str(form.get(k,'')).strip() for k in ['source','archive','unavailable','model','search_engine','transcript_mode','google_client_id','google_allowed_email']}
-    import re
-    ids = [values[k] for k in ['source','archive','unavailable'] if values[k]]
-    if len(set(ids)) != len(ids) or any(not re.fullmatch(r'[A-Za-z0-9_-]{10,100}',i) for i in ids):
-        raise Temporary('Eingetragene Playlist-IDs müssen gültig und unterschiedlich sein.')
+    for key in ('source', 'archive', 'unavailable'):
+        parsed = urlsplit(values[key])
+        if parsed.hostname in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'):
+            playlist = parse_qs(parsed.query).get('list', [''])[0]
+            if playlist:
+                values[key] = playlist
     if s.query('SELECT id FROM runs LIMIT 1') and any(values[k] != old.get(k) for k in ['source','archive','unavailable']):
         raise Temporary('Die festen Playlists können nach dem ersten Durchlauf nicht geändert werden.')
     if values['transcript_mode'] not in ('import','public') or values['search_engine'] not in ('auto','exa','firecrawl','parallel','perplexity'):
