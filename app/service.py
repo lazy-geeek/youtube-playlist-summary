@@ -160,7 +160,7 @@ class Service:
         for start in range(0, len(findings), 60):
             batch = findings[start:start+60]
             data = llm.call('Führe diese belegten Befunde thematisch zusammen. Ausreichend Substanz, Nutzen, Grenzen, '
-                'anschauliche Beispiele statt Klickanleitungen. Keine Einzelvideo-Zusammenfassungen, keine URLs, '
+                'anschauliche Beispiele statt Klickanleitungen. Nur konkrete Themenblöcke, kein Gesamtüberblick. Keine Einzelvideo-Zusammenfassungen, keine URLs, '
                 'keine Zeitmarken. JSON {"sections":[{"title":"...","paragraphs":[{"text":"deutscher Text",'
                 '"finding_ids":["..."]}]}]}. Jeder Absatz muss belegende finding_ids aus den Daten enthalten.\n'
                 + json.dumps(batch,ensure_ascii=False))
@@ -168,7 +168,7 @@ class Service:
         if len(groups) > 1:
             sourced_groups = [{**g, 'source_findings': [valid[fid] for fid in dict.fromkeys(
                 fid for p in g['paragraphs'] for fid in p['finding_ids'])]} for g in groups]
-            data = llm.call('Erstelle einen eigenständig lesbaren deutschen GESAMTBERICHT. Beginne mit Gesamtüberblick. '
+            data = llm.call('Erstelle einen eigenständig lesbaren deutschen GESAMTBERICHT. Beginne direkt mit konkreten Themenblöcken. Kein Gesamtüberblick und keine allgemeine Einleitung. '
                 'Führe Überschneidungen zusammen, erläutere neue KI-Entwicklungen, Tools und Arbeitsweisen mit Nutzen, '
                 'Grenzen und Beispielen. Eigenständige Themen angemessen behandeln. Keine Einzelvideo-Liste, keine URLs, '
                 'Zeitmarken oder Markdown-Links. Meinungen und Unsicherheit ausdrücklich kennzeichnen. '
@@ -176,6 +176,7 @@ class Service:
                 'Erhalte den Inhalt ALLER gelieferten Gruppen. JSON {"sections":[{"title":"...",'
                 '"paragraphs":[{"text":"...","finding_ids":["..."]}]}]}.\n' + json.dumps(sourced_groups,ensure_ascii=False))
             groups = self.validate_sections(data,valid)
+        groups = [g for g in groups if g['title'].strip().casefold() not in ('gesamtüberblick', 'gesamtueberblick')]
         if not groups:
             raise Temporary('Kein belegbarer Gesamtbericht erhalten.')
         represented = {valid[fid]['video_id'] for g in groups for p in g['paragraphs'] for fid in p['finding_ids']}
