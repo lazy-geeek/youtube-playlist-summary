@@ -56,6 +56,7 @@ Die App ist unter `http://localhost:8765` erreichbar. Benutzername und Passwort 
 | `ENCRYPTION_KEY` | Fernet-Schlüssel für die verschlüsselte Speicherung von Google-Zugangsdaten |
 | `DATA_DIR` | Persistentes Datenverzeichnis; lokal `./data` |
 | `OPENROUTER_API_KEY` | OpenRouter-Schlüssel, ausschließlich über die Serverumgebung gesetzt |
+| `SEARXNG_URL` | Basis-URL der eigenen SearXNG-Instanz; im Setup Suchdienst `searxng` wählen, JSON-API erforderlich |
 | `GOOGLE_ALLOWED_EMAIL` | Optionale Vorbelegung der berechtigten Google-Adresse im Setup |
 
 `.env`, Datenbanken, Berichte und lokal erzeugte Zugangsdaten gehören nicht ins Repository. `ENCRYPTION_KEY` muss dauerhaft gesichert werden: Ein Austausch macht vorhandene verschlüsselte Tokens unlesbar.
@@ -142,3 +143,5 @@ Die Tests prüfen Zugriffsschutz, CSRF, Secret-Ausgabe, HTML-Sanitizing, gespeic
 - [Playlist-Einträge hinzufügen](https://developers.google.com/youtube/v3/docs/playlistItems/insert) und [entfernen](https://developers.google.com/youtube/v3/docs/playlistItems/delete)
 - [Kommentare](https://developers.google.com/youtube/v3/docs/commentThreads/list) und [Quota](https://developers.google.com/youtube/v3/determine_quota_cost)
 - [OpenRouter Websuche](https://openrouter.ai/docs/guides/features/server-tools/web-search)
+
+Bei Auswahl von SearXNG sucht die App über dessen `/search?format=json`-API. Nur URLs aus den tatsächlichen Treffern werden als Kandidaten zugelassen und anschließend unabhängig geprüft. Es gibt keinen automatischen Rückfall auf kostenpflichtige OpenRouter-Websuche. OpenRouter bleibt für die Textauswertung zuständig.

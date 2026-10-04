@@ -182,7 +182,7 @@ async def save_setup(request:Request):
                 values[key] = playlist
     if s.query('SELECT id FROM runs LIMIT 1') and any(values[k] != old.get(k) for k in ['source','archive','unavailable']):
         raise Temporary('Die festen Playlists können nach dem ersten Durchlauf nicht geändert werden.')
-    if values['transcript_mode'] not in ('import','public') or values['search_engine'] not in ('auto','exa','firecrawl','parallel','perplexity'):
+    if values['transcript_mode'] not in ('import','public') or values['search_engine'] not in ('searxng','auto','exa','firecrawl','parallel','perplexity'):
         raise Temporary('Ungültige Transkript- oder Suchkonfiguration.')
     if values['google_allowed_email'] and '@' not in values['google_allowed_email']:
         raise Temporary('Eine gültige berechtigte Google-Adresse angeben.')
