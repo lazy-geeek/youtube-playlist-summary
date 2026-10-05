@@ -102,7 +102,7 @@ async def guard(request, call_next):
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accounts.google.com"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https://i.ytimg.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accounts.google.com"
     if SECURE:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000'
     return response
@@ -304,6 +304,12 @@ def show_run(request:Request,run_id:int):
     rendered = bleach.clean(rendered,tags=['h1','h2','h3','p','ul','ol','li','strong','em','code','pre','blockquote','a','hr','br'],
                             attributes={'a':['href','title']},protocols=['https'],strip=True)
     for section in r['sections']:
+        import re
+        video = next((i for i in r['items'] if section['markdown'].startswith('Video-ID: ' + i['video_id'] + '\n') and re.fullmatch(r'[A-Za-z0-9_-]{11}', i['video_id'])), None)
+        section['video'] = video
+        if video:
+            section['title'] = video['title']
+            section['thumbnail'] = 'https://i.ytimg.com/vi/' + video['video_id'] + '/hqdefault.jpg'
         section['html'] = bleach.clean(MarkdownIt('commonmark',{'html':False}).render(section['markdown']),
             tags=['h1','h2','h3','p','ul','ol','li','strong','em','code','pre','blockquote','a','hr','br'],
             attributes={'a':['href','title']},protocols=['https'],strip=True)
