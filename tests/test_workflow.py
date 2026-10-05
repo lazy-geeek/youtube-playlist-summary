@@ -213,13 +213,17 @@ def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(stor
     result = store.run(rid)
     assert result['status'] == 'ready'
     assert result['counts']['success'] == expected
-    assert result['unread'] == expected + 1
+    assert result['unread'] == expected
+    assert len(result['sections']) == expected
+    assert all(section['markdown'].startswith('Video-ID: ') for section in result['sections'])
     assert result['sections'][0]['title'] == 'KI-Neuigkeiten'
     assert {i['source_item'] for i in result['items']} == ({'item-a','item-b'} if expected == 2 else {'item-a'})
     assert json.loads(result['config'])['max_videos'] == limit
     assert len(yt.inserts) == expected
     assert result['archive_status'] == 'done'
-    assert result['unread'] == expected + 1
+    assert result['unread'] == expected
+    assert len(result['sections']) == expected
+    assert all(section['markdown'].startswith('Video-ID: ') for section in result['sections'])
     assert 'env-only-key' not in result['config']
     assert result['read_completed'] is None
 

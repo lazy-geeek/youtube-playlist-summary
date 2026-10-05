@@ -116,18 +116,9 @@ class Service:
             snapshot = json.loads(self.store.run(run_id)['config'])
             snapshot.update({'provenance': provenance, 'model_calls': llm.audit, 'youtube_quota_estimate': yt.units})
             with self.store.connect() as db:
-                parts = re.split(r'^## ', markdown, flags=re.MULTILINE)
-                intro = re.sub(r'^# [^\n]*\n', '', parts[0]).strip()
-                report_parts = ([('Gesamtüberblick',intro)] if intro else [])
-                for part in parts[1:]:
-                    title, _, body = part.partition('\n')
-                    report_parts.append((title.strip(),body.strip()))
-                for position, (title, body) in enumerate(report_parts):
+                for position, (title, body) in enumerate(video_sections):
                     db.execute('INSERT INTO sections(run_id,position,title,markdown) VALUES (?,?,?,?)',
                                (run_id,position,title.strip(),body.strip()))
-                if len(parts) == 1:
-                    db.execute('INSERT INTO sections(run_id,position,title,markdown) VALUES (?,?,?,?)',
-                               (run_id,0,'Ergebnis',markdown))
                 db.execute("UPDATE runs SET status='ready',markdown=?,config=? WHERE id=?",
                            (markdown,json.dumps(snapshot,ensure_ascii=False),run_id))
         except Exception as exc:
