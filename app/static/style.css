@@ -181,13 +181,13 @@ summary { cursor: pointer; font-weight: 500; }
 .section-summary .overline { display: block; font-size: .6875rem; color: #a7b09f; letter-spacing: .1em; }
 .section-title { display: block; font-size: 1.18rem; font-weight: 550; line-height: 1.4; margin-top: 4px; letter-spacing: -.025em; }
 .section-toggle { width: 27px; height: 27px; color: #b5c3a6; background: #ffffff06; border: 1px solid #4b5940; border-radius: 50%; display: grid; place-items: center; }
-.section-toggle .icon { width: 15px; height: 15px; transition: transform .2s; }
+.section-toggle .icon { width: 15px; height: 15px; transform: rotate(90deg); transition: transform .2s; }
 .reading-section[open] { background: #f8faf5; color: #1d281e; border-color: #f8faf5; box-shadow: 0 8px 34px #0002; }
 .reading-section[open] > summary { background: #e9f0e0; border-bottom: 1px solid #d8e0cf; }
 .reading-section[open] .section-number { color: #587441; }
 .reading-section[open] .overline { color: #5c6f52; }
 .reading-section[open] .section-toggle { color: #385128; border-color: #b7c8a5; background: #dce8cc; }
-.reading-section[open] .section-toggle .icon { transform: rotate(45deg); }
+.reading-section[open] .section-toggle .icon { transform: rotate(-90deg); }
 .prose { font-size: 1.025rem; line-height: 1.85; padding: 27px 35px 30px; overflow-wrap: anywhere; }
 .prose p, .prose li { line-height: 1.85; }
 .prose h1, .prose h2, .prose h3 { margin-top: 25px; margin-bottom: 12px; line-height: 1.35; }
