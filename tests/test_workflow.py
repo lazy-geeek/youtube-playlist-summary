@@ -254,3 +254,14 @@ def test_final_synthesis_receives_original_quotes(store,tmp_path):
             return {'sections':[{'title':'KI-Themen','paragraphs':[{'text':'Belegter Gesamtbericht','finding_ids':['f1','f2']}]}]}
     findings = [{'id':'f1','video_id':'v1','quote':'Original A'},{'id':'f2','video_id':'v2','quote':'Original B'}]
     assert 'Belegter Gesamtbericht' in Service(store,tmp_path).synthesize(LLM(),findings,[])[0]
+
+
+def test_playlist_entries_sorted_by_video_publication_date():
+    from app.providers import YouTube
+    yt = YouTube(None)
+    yt.pages = lambda *a, **k: [
+        {'id':'new','snippet':{'title':'New','publishedAt':'2000-01-01T00:00:00Z'},'contentDetails':{'videoId':'new-video','videoPublishedAt':'2026-01-01T00:00:00Z'}},
+        {'id':'unknown','snippet':{'title':'Unknown'},'contentDetails':{'videoId':'unknown'}},
+        {'id':'old','snippet':{'title':'Old','publishedAt':'2026-01-01T00:00:00Z'},'contentDetails':{'videoId':'old-video','videoPublishedAt':'2020-01-01T00:00:00Z'}}]
+    assert [i['source_item'] for i in yt.entries('source')] == ['old','new','unknown']
+    yt.close()

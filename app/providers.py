@@ -99,9 +99,13 @@ class YouTube:
             raise Temporary('Alle drei Playlists müssen dem angemeldeten YouTube-Kanal gehören.')
 
     def entries(self, playlist):
-        return [{'source_item': i['id'], 'video_id': i['contentDetails']['videoId'],
-                 'title': i['snippet']['title']} for i in self.pages('playlistItems', {
-                     'part': 'snippet,contentDetails', 'playlistId': playlist, 'maxResults': 50})]
+        entries = [{'source_item': i['id'], 'video_id': i['contentDetails']['videoId'],
+                    'title': i['snippet']['title'],
+                    'video_published_at': i['contentDetails'].get('videoPublishedAt', '')}
+                   for i in self.pages('playlistItems', {
+                       'part': 'snippet,contentDetails', 'playlistId': playlist, 'maxResults': 50})]
+        # videoPublishedAt is the video date; snippet.publishedAt is the playlist-add date.
+        return sorted(entries, key=lambda i: (not bool(i['video_published_at']), i['video_published_at'], i['source_item']))
 
     def metadata(self, video_id):
         data = self.request('GET', 'videos', params={'part': 'snippet', 'id': video_id})
