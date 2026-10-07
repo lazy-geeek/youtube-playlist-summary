@@ -318,6 +318,16 @@ def show_run(request:Request,run_id:int):
     return page(request,'report.html',run=r,rendered=rendered)
 
 
+@app.get('/api/runs/{run_id}/status')
+def run_status(request:Request,run_id:int):
+    try:
+        run = request.app.state.store.run(run_id)
+    except KeyError:
+        raise HTTPException(404,'Bericht nicht gefunden.')
+    return {'status':run['status'], 'archive_status':run['archive_status'],
+            'counts':run['counts'], 'error':run['error']}
+
+
 @app.get('/runs/{run_id}/markdown')
 def export(request:Request,run_id:int):
     try:
