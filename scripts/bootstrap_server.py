@@ -46,5 +46,5 @@ run('checks:disable',APP,'web')
 run('ps:set',APP,'stop-timeout-seconds','120')
 run('nginx:set',APP,'proxy-read-timeout','600s')
 run('nginx:set',APP,'client-max-body-size','2m')
-run('http-auth:enable',APP,values['username'],values['password'],quiet=True)
+# The app handles authentication and persistent secure browser sessions.
 print('Dokku app, credentials, persistence and proxy configured.')

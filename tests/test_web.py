@@ -140,3 +140,22 @@ def test_google_oauth_redirect_allowed_by_csp(client):
     assert response.status_code == 303
     assert response.headers['location'].startswith('https://accounts.google.com/o/oauth2/v2/auth?')
     assert "form-action 'self' https://accounts.google.com" in response.headers['content-security-policy']
+
+
+def test_authentication_remembered_by_cookie(client):
+    authorize(client)
+    response = client.get('/')
+    cookie = response.headers['set-cookie']
+    assert 'Max-Age=2592000' in cookie and 'HttpOnly' in cookie
+    client.headers.pop('Authorization')
+    assert client.get('/setup').status_code == 200
+    client.cookies.clear()
+    assert client.get('/setup').status_code == 401
+
+
+def test_password_change_invalidates_remembered_session(client, monkeypatch):
+    authorize(client)
+    assert client.get('/').status_code == 200
+    client.headers.pop('Authorization')
+    monkeypatch.setenv('APP_PASSWORD','another-long-password')
+    assert client.get('/').status_code == 401

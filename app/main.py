@@ -71,19 +71,19 @@ async def guard(request, call_next):
         ok = scheme.lower() == 'basic' and hmac.compare_digest(user.encode(),os.environ.get('APP_USERNAME','owner').encode()) and hmac.compare_digest(password.encode(),os.environ.get('APP_PASSWORD','').encode())
     except (ValueError, UnicodeError):
         ok = False
-    if not ok:
-        return auth_challenge()
     store = request.app.state.store
     token = request.cookies.get('briefing_session', '')
-    sid = hashlib.sha256(token.encode()).hexdigest()
+    sid = hashlib.sha256((token + os.environ.get('APP_USERNAME','owner') + os.environ.get('APP_PASSWORD','')).encode()).hexdigest()
     rows = store.query('SELECT * FROM sessions WHERE id=? AND expires>?', (sid,time.time()))
     fresh = not rows
+    if fresh and not ok:
+        return auth_challenge()
     if fresh:
         token = secrets.token_urlsafe(32)
-        sid = hashlib.sha256(token.encode()).hexdigest()
+        sid = hashlib.sha256((token + os.environ.get('APP_USERNAME','owner') + os.environ.get('APP_PASSWORD','')).encode()).hexdigest()
         csrf = secrets.token_urlsafe(32)
         store.execute('DELETE FROM sessions WHERE expires<?', (time.time(),))
-        store.execute('INSERT INTO sessions(id,csrf,expires) VALUES (?,?,?)', (sid,csrf,time.time()+86400))
+        store.execute('INSERT INTO sessions(id,csrf,expires) VALUES (?,?,?)', (sid,csrf,time.time()+30*86400))
         session = {'id':sid,'csrf':csrf,'oauth_state':None}
     else:
         session = rows[0]
@@ -98,7 +98,7 @@ async def guard(request, call_next):
             return PlainTextResponse('Ungültiger Formularschutz.',status_code=403)
     response = await call_next(request)
     if fresh:
-        response.set_cookie('briefing_session',token,httponly=True,secure=SECURE,samesite='lax',max_age=86400)
+        response.set_cookie('briefing_session',token,httponly=True,secure=SECURE,samesite='lax',max_age=30*86400)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
