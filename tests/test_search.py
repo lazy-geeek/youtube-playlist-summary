@@ -41,3 +41,29 @@ def test_searxng_failure_does_not_call_openrouter_search(monkeypatch):
         config = {'search_engine':'searxng'}
         def call(self, *args, **kwargs): raise AssertionError('Must not fall back')
     assert not Links(LLM()).verify({'name':'Project'}, set())['verified']
+
+
+def test_model_proposed_github_repo_is_verified_without_search(monkeypatch):
+    class Response:
+        status_code = 200
+        def json(self): return {'full_name':'Owner/Repo','html_url':'https://github.com/Owner/Repo'}
+    monkeypatch.setattr('app.providers.httpx.get', lambda url, **kwargs: Response())
+    def no_search(resource): raise AssertionError('Must not search')
+    monkeypatch.setattr('app.providers.searxng_search', no_search)
+    class LLM:
+        config = {'search_engine':'searxng'}
+        def call(self, prompt, **kwargs): return {'verified':True}
+    result = Links(LLM()).verify({'name':'Repo','url':'https://github.com/Owner/Repo'}, set())
+    assert result['verified'] and result['url'] == 'https://github.com/Owner/Repo' and not result['searched']
+
+
+def test_model_proposed_github_repo_that_does_not_exist_stays_unverified(monkeypatch):
+    class Response:
+        status_code = 404
+    monkeypatch.setattr('app.providers.httpx.get', lambda url, **kwargs: Response())
+    monkeypatch.setattr('app.providers.searxng_search', lambda resource: [])
+    class LLM:
+        config = {'search_engine':'searxng'}
+        def call(self, prompt, **kwargs): return {'url':''}
+    result = Links(LLM()).verify({'name':'Repo','url':'https://github.com/Owner/Invented'}, set())
+    assert not result['verified'] and result['url'] == '' and result['searched']

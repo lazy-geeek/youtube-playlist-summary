@@ -114,7 +114,7 @@ Der Test verwendet lokale Zugangsdaten und gibt sie nicht aus. Er verändert kei
 
 ## Ressourcenlinks und Modellgrenzen
 
-Verlinkt werden ausschließlich Ressourcen, auf die im Video selbst (Transkript) verwiesen wird. Beschreibung und bis zu 200 relevante Top-Level-Kommentare des Kanalautors dienen nur dazu, die exakte URL einer genannten Ressource zu finden; Links, die nur dort stehen, werden nicht übernommen. Empfehlungs- und Tracking-Parameter werden entfernt, GitHub-Links auf die Repository-Adresse gekürzt. Eine fehlgeschlagene Link-Ermittlung unterbricht den Durchlauf nicht.
+Verlinkt werden ausschließlich Ressourcen, auf die im Video selbst (Transkript) verwiesen wird. Beschreibung und bis zu 200 relevante Top-Level-Kommentare des Kanalautors dienen nur dazu, die exakte URL einer genannten Ressource zu finden; Links, die nur dort stehen, werden nicht übernommen. Fehlt die URL eines genannten GitHub-Projekts in diesen Daten, darf das Modell die Repository-Adresse vorschlagen; verlinkt wird sie nur, wenn die GitHub-API das Repository bestätigt und die Identitätsprüfung passt. Andernfalls folgt die Suche. Empfehlungs- und Tracking-Parameter werden entfernt, GitHub-Links auf die Repository-Adresse gekürzt. Eine fehlgeschlagene Link-Ermittlung unterbricht den Durchlauf nicht.
 
 Fehlende URLs werden mit dem OpenRouter-Servertool `openrouter:web_search` recherchiert. Die Antwort muss einen tatsächlich ausgeführten Suchaufruf nachweisen. Anschließend werden Zieladresse und Projektbezug geprüft. Unsichere Kandidaten bleiben als Namen mit Unsicherheitshinweis stehen.
 

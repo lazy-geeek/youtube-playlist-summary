@@ -213,6 +213,17 @@ def test_search_without_tool_execution_cannot_return_candidate():
     finally: llm.close()
 
 
+def test_json_answer_wrapped_in_code_fence_and_prose_is_parsed():
+    import httpx
+    llm = OpenRouter({'model':'fake','openrouter_key':'fake'})
+    llm.client.close()
+    llm.client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200,json={
+        'choices':[{'finish_reason':'stop','message':{'content':'```json\n{"resources":[{"name":"Markitdown"}]}\n```\n\nHinweis: Sponsorenlinks fehlen.'}}]})))
+    try:
+        assert llm.resources('transcript',{}) == [{'name':'Markitdown'}]
+    finally: llm.close()
+
+
 def test_playlist_entries_sorted_by_video_publication_date():
     from app.providers import YouTube
     yt = YouTube(None)
