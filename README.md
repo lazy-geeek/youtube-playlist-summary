@@ -59,6 +59,7 @@ Die App ist unter `http://localhost:8765` erreichbar. Benutzername und Passwort 
 | `APIFY_TRANSCRIPT_LANGUAGE` | Bevorzugte Untertitelsprache; Standard `en` |
 | `APIFY_TRANSCRIPT_ACTOR` | Actor-ID; unterstützt: `starvibe/youtube-video-transcript` |
 | `SEARXNG_URL` | Basis-URL der eigenen SearXNG-Instanz; im Setup Suchdienst `searxng` wählen, JSON-API erforderlich |
+| `GITHUB_TOKEN` | Optional; hebt das Limit der GitHub-API für die Prüfung von Repository-Links von 60 auf 5.000 Abfragen pro Stunde. Ein Token ohne Berechtigungen genügt |
 | `GOOGLE_ALLOWED_EMAIL` | Optionale Vorbelegung der berechtigten Google-Adresse im Setup |
 
 `.env`, Datenbanken, Berichte und lokal erzeugte Zugangsdaten gehören nicht ins Repository. `ENCRYPTION_KEY` muss dauerhaft gesichert werden: Ein Austausch macht vorhandene verschlüsselte Tokens unlesbar.
@@ -114,7 +115,7 @@ Der Test verwendet lokale Zugangsdaten und gibt sie nicht aus. Er verändert kei
 
 ## Ressourcenlinks und Modellgrenzen
 
-Verlinkt werden ausschließlich Ressourcen, auf die im Video selbst (Transkript) verwiesen wird. Beschreibung und bis zu 200 relevante Top-Level-Kommentare des Kanalautors dienen nur dazu, die exakte URL einer genannten Ressource zu finden; Links, die nur dort stehen, werden nicht übernommen. Fehlt die URL eines genannten GitHub-Projekts in diesen Daten, darf das Modell die Repository-Adresse vorschlagen; verlinkt wird sie nur, wenn die GitHub-API das Repository bestätigt und die Identitätsprüfung passt. Andernfalls folgt die Suche. Empfehlungs- und Tracking-Parameter werden entfernt, GitHub-Links auf die Repository-Adresse gekürzt. Eine fehlgeschlagene Link-Ermittlung unterbricht den Durchlauf nicht.
+Verlinkt werden ausschließlich Ressourcen, die das Video selbst (Transkript) vorstellt, empfiehlt oder auf die es ausdrücklich verweist. Beiläufig Erwähntes, eigene Angebote des Kanals (Guides, Kurse, Newsletter) und Sponsoren bleiben außen vor. Beschreibung und bis zu 200 relevante Top-Level-Kommentare des Kanalautors dienen nur dazu, die exakte URL einer genannten Ressource zu finden; Links, die nur dort stehen, werden nicht übernommen. Fehlt die URL eines genannten GitHub-Projekts in diesen Daten, darf das Modell die Repository-Adresse vorschlagen; verlinkt wird sie nur, wenn die GitHub-API das Repository bestätigt und die Identitätsprüfung passt. Andernfalls folgt die Suche. Empfehlungs- und Tracking-Parameter werden entfernt, GitHub-Links auf die Repository-Adresse gekürzt. Eine fehlgeschlagene Link-Ermittlung unterbricht den Durchlauf nicht.
 
 Fehlende URLs werden mit dem OpenRouter-Servertool `openrouter:web_search` recherchiert. Die Antwort muss einen tatsächlich ausgeführten Suchaufruf nachweisen. Anschließend werden Zieladresse und Projektbezug geprüft. Unsichere Kandidaten bleiben als Namen mit Unsicherheitshinweis stehen.
 
