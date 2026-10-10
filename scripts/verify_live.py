@@ -26,7 +26,7 @@ with httpx.Client(base_url=url,timeout=25,follow_redirects=False) as c:
         print('Authenticated:',route,r.status_code)
     response = c.get('/setup')
     assert url + '/oauth/callback' in response.text
-    assert 'OPENROUTER_API_KEY' in response.text
+    assert 'OpenRouter-Schlüssel' in response.text
     assert 'HttpOnly' in c.get('/').headers.get('set-cookie','') or c.cookies.get('briefing_session')
     assert 'frame-ancestors' in response.headers['content-security-policy']
     assert c.post('/runs',data={'csrf':'bad'},headers={'Origin':url}).status_code == 403
