@@ -157,3 +157,14 @@ def test_password_change_invalidates_remembered_session(client, monkeypatch):
     client.headers.pop('Authorization')
     monkeypatch.setenv('APP_PASSWORD','another-long-password')
     assert client.get('/').status_code == 401
+
+
+def test_section_renders_markdown_table(client):
+    authorize(client)
+    s = client.app.state.store
+    rid = s.execute('INSERT INTO runs(created,status,config,markdown) VALUES (?,?,?,?)',('2026-10-04','ready','{}','# Bericht'))
+    s.execute('INSERT INTO sections(run_id,position,title,markdown) VALUES (?,?,?,?)',
+        (rid,0,'KI','**Testergebnis** (alle Stufen):\n| Stufe | Dauer |\n|---|---|\n| Low | 27 Sekunden |'))
+    text = client.get(f'/runs/{rid}').text
+    assert '<th>Stufe</th>' in text and '<td>27 Sekunden</td>' in text
+    assert '|---|' not in text

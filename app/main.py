@@ -294,15 +294,20 @@ def link_video_ids(html, items):
     return ''.join(parts)
 
 
+def render_markdown(text):
+    rendered = MarkdownIt('commonmark',{'html':False}).enable('table').render(text)
+    return bleach.clean(rendered,tags=['h1','h2','h3','p','ul','ol','li','strong','em','code','pre','blockquote','a','hr','br',
+                                       'table','thead','tbody','tr','th','td'],
+                        attributes={'a':['href','title']},protocols=['https'],strip=True)
+
+
 @app.get('/runs/{run_id}',response_class=HTMLResponse)
 def show_run(request:Request,run_id:int):
     try:
         r = request.app.state.store.run(run_id)
     except KeyError:
         raise HTTPException(404,'Bericht nicht gefunden.')
-    rendered = MarkdownIt('commonmark',{'html':False}).render(r['markdown'])
-    rendered = bleach.clean(rendered,tags=['h1','h2','h3','p','ul','ol','li','strong','em','code','pre','blockquote','a','hr','br'],
-                            attributes={'a':['href','title']},protocols=['https'],strip=True)
+    rendered = render_markdown(r['markdown'])
     for section in r['sections']:
         import re
         video = next((i for i in r['items'] if section['markdown'].startswith('Video-ID: ' + i['video_id'] + '\n') and re.fullmatch(r'[A-Za-z0-9_-]{11}', i['video_id'])), None)
@@ -310,10 +315,7 @@ def show_run(request:Request,run_id:int):
         if video:
             section['title'] = video['title']
             section['thumbnail'] = 'https://i.ytimg.com/vi/' + video['video_id'] + '/hqdefault.jpg'
-        section['html'] = bleach.clean(MarkdownIt('commonmark',{'html':False}).render(section['markdown']),
-            tags=['h1','h2','h3','p','ul','ol','li','strong','em','code','pre','blockquote','a','hr','br'],
-            attributes={'a':['href','title']},protocols=['https'],strip=True)
-        section['html'] = link_video_ids(section['html'], r['items'])
+        section['html'] = link_video_ids(render_markdown(section['markdown']), r['items'])
     rendered = link_video_ids(rendered, r['items'])
     return page(request,'report.html',run=r,rendered=rendered)
 
