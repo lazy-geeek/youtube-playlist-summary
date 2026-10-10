@@ -2,7 +2,8 @@ import json
 import os
 import re
 from pathlib import Path
-from .db import Busy, now
+from urllib.parse import urlsplit, parse_qsl, urlencode
+from .db import now
 from .providers import YouTube, Transcripts, OpenRouter, Links, Temporary, Unavailable, source_urls
 
 
@@ -59,7 +60,6 @@ class Service:
         self.store.claim('report')
         # Snapshot excludes all credentials; destination IDs remain immutable per run.
         snapshot = {k: c.get(k, '') for k in ('source','archive','unavailable','model','search_engine','transcript_mode','google_subject','max_videos')}
-        snapshot['format'] = 'per-video'
         try:
             run_id = self.store.execute('INSERT INTO runs(created,status,config) VALUES (?,?,?)', (now(),'running',json.dumps(snapshot)))
             self.store.execute('UPDATE work_lock SET run_id=? WHERE id=1', (run_id,))
@@ -83,15 +83,13 @@ class Service:
             transcripts = Transcripts(c['transcript_mode'], self.directory)
             video_sections = []
             for item in self.store.run(run_id)['items']:
-                status, reason, evidence = 'temporary', '', {}
+                status, reason = 'temporary', ''
                 try:
-                    text, origin = transcripts.fetch(item['video_id'])
+                    text, _ = transcripts.fetch(item['video_id'])
                     summary = llm.summarize_video(item['title'], text)
                     summary = re.sub(r'^#{1,2} ', '### ', summary, flags=re.MULTILINE)
-                    body = 'Video-ID: ' + item['video_id'] + '\n\n' + summary
+                    body = 'Video-ID: ' + item['video_id'] + '\n\n' + summary + self.resource_links(yt, llm, item, text)
                     video_sections.append((item['title'].replace('\n', ' '), body))
-                    evidence = {'origin': origin, 'summary': summary,
-                                'video_id': item['video_id'], 'title': item['title']}
                     status = 'success'
                 except Unavailable as exc:
                     status, reason = 'unavailable', str(exc)
@@ -100,21 +98,19 @@ class Service:
                 except Exception:
                     reason = 'Unerwarteter Verarbeitungsfehler; später erneut versuchen.'
                 target = c['archive'] if status == 'success' else c['unavailable'] if status == 'unavailable' else None
-                self.store.execute('UPDATE items SET status=?,reason=?,evidence=?,target=? WHERE id=?',
-                                   (status,reason,json.dumps(evidence,ensure_ascii=False),target,item['id']))
+                self.store.execute('UPDATE items SET status=?,reason=?,target=? WHERE id=?',
+                                   (status,reason,target,item['id']))
             counts = self.store.run(run_id)['counts']
             markdown = '# Video-Zusammenfassungen\n'
             for title, body in video_sections:
                 markdown += '\n## ' + title + '\n\n' + body + '\n'
-            provenance = [{'video_id': i['video_id'], 'title': i['title']}
-                          for i in self.store.run(run_id)['items'] if i['status'] == 'success']
             if not video_sections:
                 markdown += '\nEs konnte kein Video inhaltlich ausgewertet werden.\n'
             markdown += (f"\n\n## Auswertung dieses Durchlaufs\n\n{counts['success']} Videos ausgewertet, "
                          f"{counts['unavailable']} sicher ohne verwertbare Untertitel, {counts['temporary']} vorübergehend fehlgeschlagen. "
                          'Fehlgeschlagene Videos bleiben für einen späteren Versuch in der Quelle.\n')
             snapshot = json.loads(self.store.run(run_id)['config'])
-            snapshot.update({'provenance': provenance, 'model_calls': llm.audit, 'youtube_quota_estimate': yt.units})
+            snapshot.update({'model_calls': llm.audit, 'youtube_quota_estimate': yt.units})
             with self.store.connect() as db:
                 for position, (title, body) in enumerate(video_sections):
                     db.execute('INSERT INTO sections(run_id,position,title,markdown) VALUES (?,?,?,?)',
@@ -133,74 +129,28 @@ class Service:
             self.confirm(run_id)
             self.archive(run_id)
 
-    def synthesize(self, llm, findings, links):
-        valid = {f['id']: f for f in findings}
-        # Hierarchical thematic reduction includes every successfully analysed video.
-        groups = []
-        for start in range(0, len(findings), 60):
-            batch = findings[start:start+60]
-            data = llm.call('Führe diese belegten Befunde thematisch zusammen. Ausreichend Substanz, Nutzen, Grenzen, '
-                'Direkte Themen und Fakten, keine Sprecherreferenzen oder Erzählrahmen. Empfehlungen und Unsicherheit kenntlich machen. '
-                'anschauliche Beispiele statt Klickanleitungen. Nur konkrete Themenblöcke, kein Gesamtüberblick. Keine Einzelvideo-Zusammenfassungen, keine URLs, '
-                'keine Zeitmarken. JSON {"sections":[{"title":"...","paragraphs":[{"text":"deutscher Text",'
-                '"finding_ids":["..."]}]}]}. Jeder Absatz muss belegende finding_ids aus den Daten enthalten.\n'
-                + json.dumps(batch,ensure_ascii=False))
-            groups.extend(self.validate_sections(data,valid))
-        if len(groups) > 1:
-            sourced_groups = [{**g, 'source_findings': [valid[fid] for fid in dict.fromkeys(
-                fid for p in g['paragraphs'] for fid in p['finding_ids'])]} for g in groups]
-            data = llm.call('Erstelle einen eigenständig lesbaren deutschen GESAMTBERICHT. Beginne direkt mit konkreten Themenblöcken. Kein Gesamtüberblick und keine allgemeine Einleitung. '
-                'Führe Überschneidungen zusammen, erläutere neue KI-Entwicklungen, Tools und Arbeitsweisen mit Nutzen, '
-                'Grenzen und Beispielen. Eigenständige Themen angemessen behandeln. Keine Einzelvideo-Liste, keine URLs, '
-                'Zeitmarken oder Markdown-Links. Meinungen und Unsicherheit ausdrücklich kennzeichnen. '
-                'Originalzitate und Video-IDs stehen in source_findings; verwende sie als Belege. '
-                'Erhalte den Inhalt ALLER gelieferten Gruppen. JSON {"sections":[{"title":"...",'
-                '"paragraphs":[{"text":"...","finding_ids":["..."]}]}]}.\n' + json.dumps(sourced_groups,ensure_ascii=False))
-            groups = self.validate_sections(data,valid)
-        groups = [g for g in groups if g['title'].strip().casefold() not in ('gesamtüberblick', 'gesamtueberblick')]
-        if not groups:
-            raise Temporary('Kein belegbarer Gesamtbericht erhalten.')
-        represented = {valid[fid]['video_id'] for g in groups for p in g['paragraphs'] for fid in p['finding_ids']}
-        if represented != {f['video_id'] for f in findings}:
-            raise Temporary('Gesamtbericht deckt nicht alle erfolgreich analysierten Videos ab; bitte erneut versuchen.')
-        markdown = '# Playlist-Bericht\n'
-        provenance = []
-        for group in groups:
-            markdown += '\n## ' + clean_prose(group['title']) + '\n\n'
-            for p in group['paragraphs']:
-                text = clean_prose(p['text'])
-                markdown += text + '\n\n'
-                provenance.append({'text':text,'findings':[valid[fid] for fid in p['finding_ids']]})
-        if links:
-            markdown += '\n## Tools und zentrale Ressourcen\n\n'
-            seen = set()
-            for r in links:
-                identity = r['url'] or r['name'].casefold()
-                if identity in seen:
-                    continue
-                seen.add(identity)
-                name = clean_prose(r['name']).replace('[','').replace(']','').replace('\n',' ')
-                if not name.strip():
-                    continue
-                if r['verified']:
-                    markdown += f"- [{name}](<{r['url']}>) — URL und Projektbezug geprüft.\n"
-                else:
-                    markdown += f'- {name} — Identität beziehungsweise URL nicht sicher verifiziert.\n'
-        return markdown, provenance
-
-    @staticmethod
-    def validate_sections(data, valid):
-        result = []
-        for section in data.get('sections', []) if isinstance(data, dict) else []:
-            if not isinstance(section, dict) or not isinstance(section.get('title'), str):
+    def resource_links(self, yt, llm, item, text):
+        # Link lookup is best effort; a failure never costs the video its summary.
+        try:
+            meta = yt.metadata(item['video_id'])
+            comments, _ = yt.comments(item['video_id'], meta['channel_id'])
+            meta['creator_comments'] = comments
+            # Description and creator comments only supply exact URLs for resources the video itself names.
+            allowed = {clean_url(u) for u in source_urls(text + '\n' + meta['description'] + '\n' + '\n'.join(comments))}
+            links = [Links(llm).verify({**r, 'url': clean_url(str(r.get('url', '')))}, allowed)
+                     for r in llm.resources(text, meta)]
+        except Exception:
+            return ''
+        lines, seen = [], set()
+        for r in links:
+            name = clean_prose(r['name']).replace('[','').replace(']','').replace('\n',' ').strip()
+            url = clean_url(r['url']) if r['verified'] else ''
+            identity = (url or name).casefold()
+            if not name or identity in seen:
                 continue
-            paragraphs = []
-            for p in section.get('paragraphs', []):
-                if isinstance(p, dict) and isinstance(p.get('text'), str) and isinstance(p.get('finding_ids'), list) and p['finding_ids'] and all(isinstance(fid,str) and fid in valid for fid in p['finding_ids']):
-                    paragraphs.append(p)
-            if paragraphs:
-                result.append({'title': section['title'], 'paragraphs': paragraphs})
-        return result
+            seen.add(identity)
+            lines.append(f'- [{name}](<{url}>)' if url else f'- {name} — URL nicht sicher verifiziert.')
+        return '\n\n### Links aus dem Video\n\n' + '\n'.join(lines) if lines else ''
 
     def confirm(self, run_id):
         self.store.claim('archive', run_id)
@@ -266,7 +216,14 @@ def clean_prose(text):
     return re.sub(r'(?i)\b(?:zeitmarke|timestamp)\s*\d+:\d+(?::\d+)?\b', '', text).strip()
 
 
-def urlsplit_name(url):
-    from urllib.parse import urlsplit
+REFERRAL_PARAM = re.compile(r'(?i)utm_.*|ref|referral|referrer|via|aff.*|fpr|tag|partner|coupon|promo.*|gclid|fbclid')
+
+
+def clean_url(url):
+    # GitHub deep links collapse to the repository; referral and tracking parameters are dropped.
     p = urlsplit(url)
-    return (p.path.strip('/') if p.hostname == 'github.com' else p.hostname) or 'Ressource'
+    parts = p.path.strip('/').split('/')
+    if p.hostname in ('github.com', 'www.github.com') and len(parts) >= 2:
+        return 'https://github.com/' + parts[0] + '/' + parts[1].removesuffix('.git')
+    query = urlencode([(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not REFERRAL_PARAM.fullmatch(k)])
+    return p._replace(query=query, fragment='').geturl()

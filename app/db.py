@@ -1,5 +1,4 @@
 import json
-import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -36,7 +35,7 @@ class Store:
                 id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES runs(id),
                 source_item TEXT NOT NULL, video_id TEXT NOT NULL, title TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending', reason TEXT NOT NULL DEFAULT '',
-                evidence TEXT NOT NULL DEFAULT '{}', target TEXT, target_item TEXT,
+                target TEXT, target_item TEXT,
                 move_status TEXT NOT NULL DEFAULT 'pending',
                 UNIQUE(run_id, source_item));
             CREATE TABLE IF NOT EXISTS sections (
@@ -46,10 +45,6 @@ class Store:
             CREATE TABLE IF NOT EXISTS work_lock (id INTEGER PRIMARY KEY CHECK(id=1), kind TEXT NOT NULL, run_id INTEGER);
             CREATE TABLE IF NOT EXISTS probes (id INTEGER PRIMARY KEY, created TEXT NOT NULL, config TEXT NOT NULL, results TEXT NOT NULL, success INTEGER NOT NULL);
             ''')
-        with self.connect() as db:
-            columns = {row[1] for row in db.execute('PRAGMA table_info(runs)')}
-            if 'read_completed' not in columns:
-                db.execute('ALTER TABLE runs ADD COLUMN read_completed TEXT')
         self.path.chmod(0o600)
 
     @contextmanager

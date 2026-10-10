@@ -7,8 +7,7 @@ Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start aus
 - Google OAuth für den Zugriff auf private Playlists.
 - Eine feste Quell-Playlist sowie zwei bereits vorhandene Ziel-Playlists.
 - Transkriptanalyse mit konfigurierbarem OpenRouter-Modell.
-- Gemeinsame Auswertung thematischer Überschneidungen über mehrere Videos.
-- Geprüfte Ressourcenlinks und klar gekennzeichnete Unsicherheit.
+- Geprüfte Links zu den im Video genannten Tools, Projekten und Repositories am Ende jedes Video-Abschnitts.
 - Einzelne Leseabschnitte, dauerhafte Historie und vollständiger Markdown-Export.
 - Automatische Archivierung nach erfolgreicher Erstellung und Speicherung des Briefings; der Lesestatus bleibt unabhängig.
 - Fortsetzbare Playlist-Operationen mit gespeichertem Fortschritt.
@@ -16,11 +15,11 @@ Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start aus
 
 ## Ablauf
 
-Ein Durchlauf speichert die beim Start gelesenen Playlist-Einträge einschließlich ihrer **Playlist-Item-IDs**. Erfolgreich ausgewertete Videos fließen in einen gemeinsamen Bericht ein. Sicher fehlende Untertitel und vorübergehende Fehler werden getrennt behandelt; Titel und Beschreibungen ersetzen kein Transkript.
+Ein Durchlauf speichert die beim Start gelesenen Playlist-Einträge einschließlich ihrer **Playlist-Item-IDs**. Jedes erfolgreich ausgewertete Video erhält einen eigenen Abschnitt. Sicher fehlende Untertitel und vorübergehende Fehler werden getrennt behandelt; Titel und Beschreibungen ersetzen kein Transkript.
 
-Die Themenabschnitte können einzeln als gelesen markiert werden und verschwinden dann aus der offenen Leseliste. Sobald alle Abschnitte gelesen sind, gilt der Lesevorgang als abgeschlossen. Der vollständige Bericht bleibt in der Historie und im Markdown-Export erhalten.
+Die Video-Abschnitte können einzeln als gelesen markiert werden und verschwinden dann aus der offenen Leseliste. Sobald alle Abschnitte gelesen sind, gilt der Lesevorgang als abgeschlossen. Der vollständige Bericht bleibt in der Historie und im Markdown-Export erhalten.
 
-Erst **Gelesen und archivieren** verändert die Playlists: erfolgreich ausgewertete Videos kommen ins Archiv, sicher nicht auswertbare Videos in die entsprechende dritte Playlist. Vorübergehend fehlgeschlagene Videos bleiben für einen späteren Versuch in der Quelle. Es werden ausschließlich Playlist-Einträge entfernt, niemals YouTube-Videos gelöscht.
+Nach erfolgreicher Erstellung und Speicherung des Briefings werden die Playlists automatisch angepasst: erfolgreich ausgewertete Videos kommen ins Archiv, sicher nicht auswertbare Videos in die entsprechende dritte Playlist. Vorübergehend fehlgeschlagene Videos bleiben für einen späteren Versuch in der Quelle. Es werden ausschließlich Playlist-Einträge entfernt, niemals YouTube-Videos gelöscht.
 
 ## Voraussetzungen
 
@@ -115,11 +114,11 @@ Der Test verwendet lokale Zugangsdaten und gibt sie nicht aus. Er verändert kei
 
 ## Ressourcenlinks und Modellgrenzen
 
-Transkripte, Beschreibungen und bis zu 200 relevante veröffentlichte Top-Level-Kommentare liefern Linkkandidaten. Nur Kommentare mit derselben Kanal-ID wie das Video werden als Erstellerkommentare verwendet. Unzugängliche Kommentare unterbrechen den Durchlauf nicht.
+Verlinkt werden ausschließlich Ressourcen, auf die im Video selbst (Transkript) verwiesen wird. Beschreibung und bis zu 200 relevante Top-Level-Kommentare des Kanalautors dienen nur dazu, die exakte URL einer genannten Ressource zu finden; Links, die nur dort stehen, werden nicht übernommen. Empfehlungs- und Tracking-Parameter werden entfernt, GitHub-Links auf die Repository-Adresse gekürzt. Eine fehlgeschlagene Link-Ermittlung unterbricht den Durchlauf nicht.
 
-Fehlende URLs werden mit dem OpenRouter-Servertool `openrouter:web_search` recherchiert. Die Antwort muss einen tatsächlich ausgeführten Suchaufruf nachweisen. Anschließend werden Zieladresse und Projektbezug geprüft. Unsichere Kandidaten bleiben als Namen mit Unsicherheitshinweis stehen. Modellgenerierte URLs in der Berichtprosa werden entfernt.
+Fehlende URLs werden mit dem OpenRouter-Servertool `openrouter:web_search` recherchiert. Die Antwort muss einen tatsächlich ausgeführten Suchaufruf nachweisen. Anschließend werden Zieladresse und Projektbezug geprüft. Unsichere Kandidaten bleiben als Namen mit Unsicherheitshinweis stehen.
 
-Interne Provenienz speichert Befunde, Video-IDs, wörtliche Belegzitate und Recherchekonfiguration. Belegzitate und die Abdeckung aller erfolgreichen Videos werden geprüft. Die semantische Richtigkeit bleibt eine Modellgrenze; ein echter Bericht muss vor dem produktiven Einsatz inhaltlich geprüft werden. Nicht jedes Modell unterstützt die benötigten Tool- und JSON-Modi.
+Die semantische Richtigkeit bleibt eine Modellgrenze; ein echter Bericht muss vor dem produktiven Einsatz inhaltlich geprüft werden. Nicht jedes Modell unterstützt die benötigten Tool- und JSON-Modi.
 
 ## Archivierung und Fehlerfälle
 
@@ -137,7 +136,7 @@ Eine aktive SQLite/WAL-Datenbank mit der SQLite-Backup-API konsistent sichern. Z
 uv run pytest -q
 ```
 
-Die Tests prüfen Zugriffsschutz, CSRF, Secret-Ausgabe, HTML-Sanitizing, gespeicherten Lesestand, Markdown-Export, thematische Zusammenführung und fortsetzbare Playlist-Operationen. Sie ersetzen keine Integrationstests mit eigenen Google- und OpenRouter-Zugängen auf der tatsächlichen Hosting-Umgebung.
+Die Tests prüfen Zugriffsschutz, CSRF, Secret-Ausgabe, HTML-Sanitizing, gespeicherten Lesestand, Markdown-Export, Link-Ermittlung und fortsetzbare Playlist-Operationen. Sie ersetzen keine Integrationstests mit eigenen Google- und OpenRouter-Zugängen auf der tatsächlichen Hosting-Umgebung.
 
 ## Technische Quellen
 

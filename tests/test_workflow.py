@@ -1,10 +1,9 @@
 import json
-from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 from app.db import Store, Busy, now
 from app.service import Service, probe_config, clean_prose
-from app.providers import Temporary, Transcripts, Unavailable, OpenRouter
+from app.providers import Temporary, Transcripts, OpenRouter
 
 
 @pytest.fixture
@@ -157,28 +156,6 @@ def test_model_cannot_inject_links():
     assert 'https' not in clean_prose('[Fake](https://evil.test) https://evil.test/path <script>bad</script>')
 
 
-def test_synthesis_requires_evidence(store,tmp_path):
-    assert Service.validate_sections({'sections':[{'title':'Thema','paragraphs':[{'text':'Fake','finding_ids':['missing']}]}]}, {}) == []
-
-
-def test_hierarchical_synthesis_combines_topics_and_preserves_videos(store,tmp_path):
-    class LLM:
-        def call(self,prompt):
-            return {'sections':[{'title':'KI-Entwicklungen','paragraphs':[{'text':'Gemeinsames Thema mit Nutzen und Grenzen.', 'finding_ids':['f1','f2']}]}]}
-    findings = [{'id':'f1','video_id':'v1','claim':'X'},{'id':'f2','video_id':'v2','claim':'X'}]
-    markdown, provenance = Service(store,tmp_path).synthesize(LLM(),findings,[])
-    assert markdown.count('## KI-Entwicklungen') == 1
-    assert {f['video_id'] for p in provenance for f in p['findings']} == {'v1','v2'}
-
-
-def test_extract_rejects_fabricated_quotes():
-    llm = OpenRouter({'model':'fake','openrouter_key':'fake'})
-    llm.call = lambda prompt: {'findings':[{'quote':'not in source','video_id':'video','kind':'fact','claim':'invented'}],'resources':[]}
-    try:
-        with pytest.raises(Temporary): llm.extract('video','real transcript',{})
-    finally: llm.close()
-
-
 @pytest.mark.parametrize('limit,expected', [('',2), ('1',1)])
 def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(store,tmp_path,monkeypatch,limit,expected):
     monkeypatch.setenv('OPENROUTER_API_KEY','env-only-key')
@@ -201,11 +178,7 @@ def test_complete_run_saves_snapshot_and_sections_without_playlist_mutation(stor
         def __init__(self,c): assert c['openrouter_key'] == 'env-only-key'
         def close(self): pass
         def summarize_video(self,title,text): return 'Eine Zusammenfassung der wesentlichen Aspekte. ' * 5
-        def extract(self,vid,text,metadata):
-            return [{'video_id':vid,'quote':'belegter Inhalt','claim':'Belegte Neuigkeit','kind':'fact','topic':'KI'}],[]
-        def call(self,prompt):
-            data = json.loads(prompt.split('\n',1)[1])
-            return {'sections':[{'title':'KI-Entwicklungen','paragraphs':[{'text':'Ein zusammengeführter Überblick.', 'finding_ids':[f['id'] for f in data]}]}]}
+        def resources(self,transcript,metadata): return []
     yt = YT()
     service = Service(store,tmp_path,youtube_factory=lambda s:yt,llm_factory=LLM)
     rid,c = service.create()
@@ -240,22 +213,6 @@ def test_search_without_tool_execution_cannot_return_candidate():
     finally: llm.close()
 
 
-def test_final_synthesis_receives_original_quotes(store,tmp_path):
-    class LLM:
-        calls = 0
-        def call(self,prompt):
-            self.calls += 1
-            if self.calls == 1:
-                return {'sections':[{'title':name,'paragraphs':[{'text':'Belegt','finding_ids':[fid]}]}
-                    for name,fid in [('A','f1'),('B','f2')]]}
-            groups = json.loads(prompt.split('\n',1)[1])
-            assert groups[0]['source_findings'][0]['quote'] == 'Original A'
-            assert groups[1]['source_findings'][0]['quote'] == 'Original B'
-            return {'sections':[{'title':'KI-Themen','paragraphs':[{'text':'Belegter Gesamtbericht','finding_ids':['f1','f2']}]}]}
-    findings = [{'id':'f1','video_id':'v1','quote':'Original A'},{'id':'f2','video_id':'v2','quote':'Original B'}]
-    assert 'Belegter Gesamtbericht' in Service(store,tmp_path).synthesize(LLM(),findings,[])[0]
-
-
 def test_playlist_entries_sorted_by_video_publication_date():
     from app.providers import YouTube
     yt = YouTube(None)
@@ -265,3 +222,34 @@ def test_playlist_entries_sorted_by_video_publication_date():
         {'id':'old','snippet':{'title':'Old','publishedAt':'2026-01-01T00:00:00Z'},'contentDetails':{'videoId':'old-video','videoPublishedAt':'2020-01-01T00:00:00Z'}}]
     assert [i['source_item'] for i in yt.entries('source')] == ['old','new','unknown']
     yt.close()
+
+
+def test_video_section_lists_only_verified_links_named_in_video(store,tmp_path,monkeypatch):
+    class YT:
+        def metadata(self,vid):
+            return {'title':'Tools','channel_id':'channel','description':
+                'Code: https://github.com/Owner/Repo/tree/main Tool: https://tool.example/?via=creator&plan=pro Sponsor: https://sponsor.example/deal'}
+        def comments(self,*args): return [],''
+    class LLM:
+        config = {'search_engine':'searxng'}
+        def resources(self,transcript,metadata):
+            return [{'name':'Repo','url':'https://github.com/Owner/Repo/tree/main'},
+                    {'name':'Tool','url':'https://tool.example/?via=creator&plan=pro'},
+                    {'name':'Other Tool','url':''}]
+        def call(self,prompt,**kwargs): return {'verified':True,'reason':'passt'}
+    class Response:
+        status_code = 200
+        def json(self): return {'full_name':'Owner/Repo','html_url':'https://github.com/Owner/Repo'}
+    def get(url,**kwargs):
+        assert url == 'https://api.github.com/repos/Owner/Repo'
+        return Response()
+    def no_search(resource): raise Temporary('Unavailable')
+    monkeypatch.setattr('app.providers.httpx.get', get)
+    monkeypatch.setattr('app.providers.fetch_page', lambda url: (url + '&ref=abc', 'Tool'))
+    monkeypatch.setattr('app.providers.searxng_search', no_search)
+    section = Service(store,tmp_path).resource_links(YT(),LLM(),{'video_id':'abcdefghijk'},'Transkript')
+    assert section.startswith('\n\n### Links aus dem Video\n\n')
+    assert '- [Repo](<https://github.com/Owner/Repo>)' in section
+    assert '- [Tool](<https://tool.example/?plan=pro>)' in section
+    assert '- Other Tool — URL nicht sicher verifiziert.' in section
+    assert 'sponsor.example' not in section
