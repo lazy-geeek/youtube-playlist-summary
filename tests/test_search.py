@@ -120,3 +120,39 @@ def test_x_links_collapse_to_profile():
     assert clean_url('https://x.com/bcherny/status/2007179832300581177') == 'https://x.com/bcherny'
     assert clean_url('https://x.com/ylecun?lang=') == 'https://x.com/ylecun'
     assert clean_url('https://x.com/i/lists/123') == 'https://x.com/i/lists/123'
+
+
+def test_identity_uses_decision_endpoint_and_falls_back_to_model_verdict(monkeypatch):
+    monkeypatch.setattr('app.providers.fetch_page', lambda url: (url, 'Project page'))
+    class Decider:
+        config = {}
+        def decide(self, state, instructions, criteria):
+            assert state['candidate'] == 'https://example.com/project' and set(criteria) == {'same','different','unclear'}
+            return self.choice
+        def call(self, prompt, **kwargs): raise AssertionError('Must not ask the text model')
+    llm = Decider()
+    llm.choice = 'same'
+    assert Links(llm).check({'name':'Project'}, 'https://example.com/project')['verified']
+    llm.choice = 'unclear'
+    assert not Links(llm).check({'name':'Project'}, 'https://example.com/project')
+    class Unavailable(Decider):
+        def decide(self, *args): raise Temporary('Alpha endpoint changed')
+        def call(self, prompt, **kwargs): return {'verified':True,'reason':'Name matches'}
+    assert Links(Unavailable()).check({'name':'Project'}, 'https://example.com/project')['reason'] == 'Name matches'
+
+
+def test_decide_needs_configured_model_and_reads_choice(monkeypatch):
+    import httpx
+    from app.providers import OpenRouter
+    llm = OpenRouter({'model':'fake','openrouter_key':'fake'})
+    llm.client.close()
+    def answer(request):
+        assert request.url.path == '/api/alpha/decisions'
+        return httpx.Response(200, json={'model':'decider','answers':{'decision':{'choice':'same','probabilities':{'same':.9}}}})
+    llm.client = httpx.Client(transport=httpx.MockTransport(answer))
+    try:
+        monkeypatch.delenv('OPENROUTER_DECISIONS_MODEL', raising=False)
+        with pytest.raises(Temporary): llm.decide({}, 'Decide', {'same':'Same'})
+        monkeypatch.setenv('OPENROUTER_DECISIONS_MODEL', 'decider')
+        assert llm.decide({}, 'Decide', {'same':'Same'}) == 'same' and llm.audit[-1]['model'] == 'decider'
+    finally: llm.close()
