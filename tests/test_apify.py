@@ -35,3 +35,13 @@ def test_apify_wrong_video_rejected(tmp_path, monkeypatch):
 def test_apify_missing_key(tmp_path, monkeypatch):
     monkeypatch.delenv('APIFY_API_TOKEN',raising=False)
     with pytest.raises(Temporary,match='APIFY_API_TOKEN'): Transcripts('apify',tmp_path).fetch('abcdefghijk')
+
+
+def test_apify_members_only_video_is_unavailable(tmp_path, monkeypatch):
+    from app.providers import Unavailable
+    monkeypatch.setenv('APIFY_API_TOKEN', 'test-key')
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return [{'video_id':'abcdefghijk', 'status':'error', 'error_category':'members_only'}]
+    monkeypatch.setattr('app.providers.httpx.post', lambda *a, **k: Response())
+    with pytest.raises(Unavailable): Transcripts('apify',tmp_path).fetch('abcdefghijk')

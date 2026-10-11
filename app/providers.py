@@ -142,6 +142,10 @@ class YouTube:
             raise Temporary('Quell-Eintrag stimmt nicht mit dem gespeicherten Snapshot überein.')
         return True
 
+    def target_present(self, item_id, target, video_id):
+        rows = self.request('GET', 'playlistItems', params={'part': 'snippet,contentDetails', 'id': item_id}).get('items', [])
+        return any(i['snippet']['playlistId'] == target and i['contentDetails']['videoId'] == video_id for i in rows)
+
     def insert(self, playlist, video_id):
         data = self.request('POST', 'playlistItems', params={'part': 'snippet'}, body={
             'snippet': {'playlistId': playlist, 'resourceId': {'kind': 'youtube#video', 'videoId': video_id}}})
@@ -187,6 +191,8 @@ def apify_transcript(video_id, directory):
         if not isinstance(items, list):
             raise ValueError('Invalid dataset')
         item = next((i for i in items if isinstance(i, dict) and i.get('video_id') == video_id), None)
+        if item and item.get('error_category') == 'members_only':
+            raise Unavailable('Video ist nur für Kanalmitglieder zugänglich.')
         if not item or item.get('status') != 'success':
             raise Temporary('Apify hat kein erfolgreiches Transkript geliefert; später erneut prüfen.')
         text = item.get('transcript_text')

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qsl, urlencode
@@ -191,8 +192,13 @@ class Service:
                         self.store.execute("UPDATE items SET move_status='inserting' WHERE id=?", (item['id'],))
                         target_item = yt.insert(item['target'],item['video_id'])
                     self.store.execute("UPDATE items SET move_status='added',target_item=?,reason='' WHERE id=?", (target_item,item['id']))
-                    # Verify target exists before deleting the exact source playlist item.
-                    if not yt.target_item(item['target'],item['video_id']):
+                    # Verify target exists before deleting the exact source playlist item. The filtered listing lags
+                    # behind a fresh insert, so the entry is looked up by its own ID and given a moment to appear.
+                    for delay in (0, 2, 5):
+                        time.sleep(delay)
+                        if yt.target_present(target_item,item['target'],item['video_id']):
+                            break
+                    else:
                         raise Temporary('Ziel-Eintrag noch nicht bestätigt; Quelle bleibt erhalten.')
                     if yt.source_present(item['source_item'],c['source'],item['video_id']):
                         yt.delete_item(item['source_item'])

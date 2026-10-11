@@ -32,10 +32,12 @@ class FakeYT:
         self.deletes = []
         self.fail_delete = False
         self.ambiguous_insert = False
+        self.listing_lags = False
         self.units = 0
     def close(self): pass
     def validate_playlists(self,ids): pass
-    def target_item(self,target,video): return self.targets.get((target,video))
+    def target_item(self,target,video): return None if self.listing_lags else self.targets.get((target,video))
+    def target_present(self,item,target,video): return self.targets.get((target,video)) == item
     def source_present(self,item,source,video):
         if item in self.source:
             assert self.source[item] == (source,video)
@@ -63,6 +65,17 @@ def test_no_mutation_before_confirmation(store,tmp_path):
     Service(store,tmp_path,youtube_factory=lambda s:yt).archive(rid)
     assert yt.inserts == yt.deletes == []
     assert len(yt.source) == 3
+
+
+def test_archive_completes_when_playlist_listing_lags_behind_insert(store,tmp_path):
+    rid = make_run(store)
+    yt = FakeYT()
+    yt.listing_lags = True
+    service = Service(store,tmp_path,youtube_factory=lambda s:yt)
+    service.confirm(rid)
+    service.archive(rid)
+    assert yt.deletes == ['item-1','item-2']
+    assert store.run(rid)['archive_status'] == 'done'
 
 
 def test_archive_exact_items_and_keep_temporary(store,tmp_path):
