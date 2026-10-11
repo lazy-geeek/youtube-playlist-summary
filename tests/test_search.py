@@ -67,3 +67,56 @@ def test_model_proposed_github_repo_that_does_not_exist_stays_unverified(monkeyp
         def call(self, prompt, **kwargs): return {'url':''}
     result = Links(LLM()).verify({'name':'Repo','url':'https://github.com/Owner/Invented'}, set())
     assert not result['verified'] and result['url'] == '' and result['searched']
+
+
+def test_searxng_prefers_model_written_query(monkeypatch):
+    monkeypatch.setenv('SEARXNG_URL', 'http://search.internal:8080')
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {'results':[]}
+    def get(url, **kwargs):
+        assert kwargs['params']['q'] == 'AI Explained YouTube channel'
+        return Response()
+    monkeypatch.setattr('app.providers.httpx.get', get)
+    assert searxng_search({'name':'AI Explained','query':'AI Explained YouTube channel'}) == []
+
+
+def test_youtube_channel_is_verified_through_data_api(monkeypatch):
+    def no_fetch(url): raise AssertionError('Must not fetch the consent stub')
+    monkeypatch.setattr('app.providers.fetch_page', no_fetch)
+    monkeypatch.setattr('app.providers.searxng_search', lambda resource: [{'url':'https://www.youtube.com/@Fireship/videos'}])
+    class YT:
+        def request(self, method, resource, params=None):
+            assert (resource, params['forHandle']) == ('channels', '@Fireship')
+            return {'items':[{'id':'UCsBjURrPoezykLs9EqgamOA','snippet':{'title':'Fireship','customUrl':'@fireship'}}]}
+    class LLM:
+        config = {'search_engine':'searxng'}
+        def call(self, prompt, **kwargs):
+            return {'url':'https://www.youtube.com/@Fireship/videos'} if prompt.startswith('Wähle') else {'verified':True}
+    result = Links(LLM(), YT()).verify({'name':'Fireship'}, set())
+    assert result['verified'] and result['url'] == 'https://www.youtube.com/@fireship'
+
+
+def test_blocked_page_falls_back_to_search_entry(monkeypatch):
+    def blocked(url): raise ValueError('Ziel nicht abrufbar.')
+    monkeypatch.setattr('app.providers.fetch_page', blocked)
+    monkeypatch.setattr('app.providers.searxng_search', lambda resource: [
+        {'url':'https://www.producthunt.com/','title':'Product Hunt','content':'The best new products in tech.'}])
+    prompts = []
+    class LLM:
+        config = {'search_engine':'searxng'}
+        def call(self, prompt, **kwargs):
+            prompts.append(prompt)
+            return {'url':'https://www.producthunt.com/'} if prompt.startswith('Wähle') else {'verified':True}
+    result = Links(LLM()).verify({'name':'Product Hunt'}, set())
+    assert result['verified'] and result['url'] == 'https://www.producthunt.com/'
+    assert 'Seite nicht abrufbar' in prompts[-1] and 'The best new products in tech.' in prompts[-1]
+    # A blocked address from the video data has no independent search entry and stays unverified.
+    assert not Links(LLM()).check({'name':'Product Hunt'}, 'https://www.producthunt.com/')
+
+
+def test_x_links_collapse_to_profile():
+    from app.service import clean_url
+    assert clean_url('https://x.com/bcherny/status/2007179832300581177') == 'https://x.com/bcherny'
+    assert clean_url('https://x.com/ylecun?lang=') == 'https://x.com/ylecun'
+    assert clean_url('https://x.com/i/lists/123') == 'https://x.com/i/lists/123'

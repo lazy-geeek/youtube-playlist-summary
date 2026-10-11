@@ -137,7 +137,7 @@ class Service:
             meta['creator_comments'] = comments
             # Description and creator comments only supply exact URLs for resources the video itself names.
             allowed = {clean_url(u) for u in source_urls(text + '\n' + meta['description'] + '\n' + '\n'.join(comments))}
-            links = [Links(llm).verify({**r, 'url': clean_url(str(r.get('url', '')))}, allowed)
+            links = [Links(llm, yt).verify({**r, 'url': clean_url(str(r.get('url', '')))}, allowed)
                      for r in llm.resources(text, meta)]
         except Exception:
             return ''
@@ -220,10 +220,12 @@ REFERRAL_PARAM = re.compile(r'(?i)utm_.*|ref|referral|referrer|via|aff.*|fpr|tag
 
 
 def clean_url(url):
-    # GitHub deep links collapse to the repository; referral and tracking parameters are dropped.
+    # GitHub deep links collapse to the repository and X posts to the profile; referral and tracking parameters are dropped.
     p = urlsplit(url)
     parts = p.path.strip('/').split('/')
     if p.hostname in ('github.com', 'www.github.com') and len(parts) >= 2:
         return 'https://github.com/' + parts[0] + '/' + parts[1].removesuffix('.git')
+    if p.hostname in ('x.com', 'www.x.com', 'twitter.com', 'www.twitter.com') and parts[0] and parts[1:2] in ([], ['status']):
+        return 'https://x.com/' + parts[0]
     query = urlencode([(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not REFERRAL_PARAM.fullmatch(k)])
     return p._replace(query=query, fragment='').geturl()
