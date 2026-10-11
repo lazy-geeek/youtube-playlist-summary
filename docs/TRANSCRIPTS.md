@@ -21,6 +21,13 @@ Die Prüfung muss **auf dem finalen Server** stattfinden, weil der Abruf auf ein
 
 Falls öffentliche Untertitel dort unzulässig oder unzuverlässig sind, verbleiben ein rechtmäßig nutzbarer lizenzierter Transkriptanbieter (zusätzliche Integration nötig) oder autorisiert bereitgestellte Untertitelimporte. Ohne nutzbare Quelle bleibt die automatische Auswertung blockiert. Audio-Transkription ist ausgeschlossen.
 
+## Gespeicherte Transkripte und Chat
+
+- Das Transkript wird beim Durchlauf im Klartext pro Abschnitt in der Datenbank gespeichert.
+- Alte Abschnitte laden es beim ersten Chat über die aktuell eingestellte Quelle nach: Apify kann bis zu 0,02 USD kosten, sofern kein Cache unter `DATA_DIR/apify-transcripts` liegt; `public` kann an IP-Sperren scheitern; `import` braucht die Datei noch.
+- Chatfragen und -antworten werden im Klartext gespeichert, die Antworten als unverändertes Modell-Markdown. Es gibt keine Löschfunktion.
+- Transkript, Zusammenfassung und Verlauf gehen bei jeder Frage an OpenRouter.
+
 ## Primärquellen
 
 - https://developers.google.com/youtube/v3/docs/captions/download

@@ -9,6 +9,7 @@ Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start aus
 - Transkriptanalyse mit konfigurierbarem OpenRouter-Modell.
 - Geprüfte Links zu den im Video genannten Tools, Projekten und Repositories am Ende jedes Video-Abschnitts.
 - Einzelne Leseabschnitte, dauerhafte Historie und vollständiger Markdown-Export.
+- Chat pro Leseabschnitt mit Transkript und Zusammenfassung, gespeicherter Verlauf, gleiches OpenRouter-Modell wie im Setup.
 - Automatische Archivierung nach erfolgreicher Erstellung und Speicherung des Briefings; der Lesestatus bleibt unabhängig.
 - Fortsetzbare Playlist-Operationen mit gespeichertem Fortschritt.
 - Benutzername/Passwort-Schutz, serverseitig verschlüsselte Google-Tokens und CSRF-Schutz.
@@ -18,6 +19,8 @@ Eine selbst gehostete Web-App, die eine YouTube-Playlist auf manuellen Start aus
 Ein Durchlauf speichert die beim Start gelesenen Playlist-Einträge einschließlich ihrer **Playlist-Item-IDs**. Jedes erfolgreich ausgewertete Video erhält einen eigenen Abschnitt. Sicher fehlende Untertitel und vorübergehende Fehler werden getrennt behandelt; Titel und Beschreibungen ersetzen kein Transkript.
 
 Die Video-Abschnitte können einzeln als gelesen markiert werden und verschwinden dann aus der offenen Leseliste. Sobald alle Abschnitte gelesen sind, gilt der Lesevorgang als abgeschlossen. Der vollständige Bericht bleibt in der Historie und im Markdown-Export erhalten.
+
+Zu jedem Video-Abschnitt kann gechattet werden. Der Chat beantwortet Fragen anhand von Transkript und Zusammenfassung, nutzt das aktuell im Setup gespeicherte Modell (`OPENROUTER_DECISIONS_MODEL` spielt dafür keine Rolle) und speichert den Verlauf pro Abschnitt. Bei älteren Briefings ohne gespeichertes Transkript wird es bei der ersten Frage einmalig über die eingestellte Transkriptquelle nachgeladen und gespeichert.
 
 Nach erfolgreicher Erstellung und Speicherung des Briefings werden die Playlists automatisch angepasst: erfolgreich ausgewertete Videos kommen ins Archiv, sicher nicht auswertbare Videos in die entsprechende dritte Playlist. Vorübergehend fehlgeschlagene Videos bleiben für einen späteren Versuch in der Quelle. Es werden ausschließlich Playlist-Einträge entfernt, niemals YouTube-Videos gelöscht.
 
@@ -85,7 +88,7 @@ Das Dockerfile verwendet Python 3.12, den Dependency-Lock und einen nicht privil
 - Passwort und Verschlüsselungsschlüssel serverseitig setzen.
 - Datenbank, Transkriptimporte und Verschlüsselungsschlüssel sichern.
 
-Die SQLite-Datenbank speichert Berichte, Abschnitte, Lesestand, Snapshots und Operationsfortschritt. Ein exklusives Prozess-Lock verhindert parallele Instanzen. Bei Dokku muss deshalb **Stop-before-start** verwendet werden; rollende Deployments mit gleichzeitig laufenden Containern sind nicht unterstützt. Während eines Deployments entsteht eine kurze Unterbrechung. Aktive Arbeit vor einem Deployment beenden lassen.
+Die SQLite-Datenbank speichert Berichte, Abschnitte, Transkripte, Chatverläufe, Lesestand, Snapshots und Operationsfortschritt. Ein exklusives Prozess-Lock verhindert parallele Instanzen. Bei Dokku muss deshalb **Stop-before-start** verwendet werden; rollende Deployments mit gleichzeitig laufenden Containern sind nicht unterstützt. Während eines Deployments entsteht eine kurze Unterbrechung. Aktive Arbeit vor einem Deployment beenden lassen.
 
 ### Optionale Dokku-Hilfsskripte
 
@@ -122,6 +125,8 @@ Fehlende URLs werden mit dem OpenRouter-Servertool `openrouter:web_search` reche
 
 Die semantische Richtigkeit bleibt eine Modellgrenze; ein echter Bericht muss vor dem produktiven Einsatz inhaltlich geprüft werden. Nicht jedes Modell unterstützt die benötigten Tool- und JSON-Modi.
 
+Links in Chat-Antworten stammen vom Modell und sind **nicht geprüft**. Sie sind nur als `https` klickbar und öffnen in einem neuen Tab. Geprüft ist weiterhin nur die Liste „Links aus dem Video“.
+
 ## Archivierung und Fehlerfälle
 
 Ein vorhandener Ziel-Eintrag wird erkannt oder ein neuer angelegt. Erst nach erneuter Zielprüfung wird der konkrete Quell-Playlist-Eintrag gelöscht. Fortschritt wird gespeichert; Quota- oder Netzwerkfehler lassen sich bei einem späteren Versuch abgleichen.
@@ -130,7 +135,7 @@ YouTube und SQLite bilden keine atomare Transaktion. Falls das Ergebnis eines Hi
 
 ## Sicherung
 
-Eine aktive SQLite/WAL-Datenbank mit der SQLite-Backup-API konsistent sichern. Zusätzlich den unveränderten Verschlüsselungsschlüssel und autorisierte Transkriptimporte sichern. Nach einer Wiederherstellung gelten weiterhin Einzelprozessbetrieb und korrekte Dateirechte. Das Projekt richtet keinen automatischen Backup-Zeitplan ein.
+Eine aktive SQLite/WAL-Datenbank mit der SQLite-Backup-API konsistent sichern; Transkripte und Chatverläufe liegen in der Datenbank und werden mitgesichert. Zusätzlich den unveränderten Verschlüsselungsschlüssel und autorisierte Transkriptimporte sichern. Nach einer Wiederherstellung gelten weiterhin Einzelprozessbetrieb und korrekte Dateirechte. Das Projekt richtet keinen automatischen Backup-Zeitplan ein.
 
 ## Tests
 

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +14,7 @@ from urllib.parse import urlencode, urlsplit, parse_qs
 import bleach
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -276,7 +277,6 @@ def history(request:Request):
 
 
 def link_video_ids(html, items):
-    import re
     ids = {i['video_id'] for i in items if re.fullmatch(r'[A-Za-z0-9_-]{11}', i['video_id'])}
     if not ids:
         return html
@@ -301,6 +301,25 @@ def render_markdown(text):
                         attributes={'a':['href','title']},protocols=['https'],strip=True)
 
 
+def chat_link(attrs, new=False):
+    href = attrs.get((None,'href'),'')
+    if not href.startswith('https://') or (new and href.endswith(('"',"'",'&quot;'))):
+        return None
+    attrs[(None,'target')] = '_blank'
+    attrs[(None,'rel')] = 'noopener noreferrer'
+    return attrs
+
+
+def render_chat(text):
+    # Code stays out of linkify, which would escape it a second time and link URLs inside it.
+    kept = []
+    def keep(match):
+        kept.append(match[0])
+        return '{\ue000' + str(len(kept) - 1) + '\ue000}'
+    rest = re.sub(r'<(pre|code)>.*?</\1>',keep,render_markdown(text).replace('\ue000',''),flags=re.DOTALL)
+    return re.sub('\\{\ue000(\\d+)\ue000\\}',lambda m: kept[int(m[1])],bleach.linkify(rest,callbacks=[chat_link],parse_email=False))
+
+
 @app.get('/runs/{run_id}',response_class=HTMLResponse)
 def show_run(request:Request,run_id:int):
     try:
@@ -308,8 +327,15 @@ def show_run(request:Request,run_id:int):
     except KeyError:
         raise HTTPException(404,'Bericht nicht gefunden.')
     rendered = render_markdown(r['markdown'])
+    chats = {}
+    for m in request.app.state.store.query('SELECT m.* FROM chat_messages m JOIN sections s ON s.id=m.section_id WHERE s.run_id=? ORDER BY m.id',(run_id,)):
+        if m['role'] == 'assistant':
+            m['html'] = render_chat(m['content'])
+        chats.setdefault(m['section_id'],[]).append(m)
+    stored = {t['section_id'] for t in request.app.state.store.query('SELECT t.section_id FROM transcripts t JOIN sections s ON s.id=t.section_id WHERE s.run_id=?',(run_id,))}
     for section in r['sections']:
-        import re
+        section['chat'] = chats.get(section['id'],[])
+        section['transcript'] = section['id'] in stored
         video = next((i for i in r['items'] if section['markdown'].startswith('Video-ID: ' + i['video_id'] + '\n') and re.fullmatch(r'[A-Za-z0-9_-]{11}', i['video_id'])), None)
         section['video'] = video
         if video:
@@ -318,6 +344,20 @@ def show_run(request:Request,run_id:int):
         section['html'] = link_video_ids(render_markdown(section['markdown']), r['items'])
     rendered = link_video_ids(rendered, r['items'])
     return page(request,'report.html',run=r,rendered=rendered)
+
+
+@app.post('/runs/{run_id}/sections/{section_id}/chat')
+def chat_section(request:Request,run_id:int,section_id:int,question:str=Form('')):
+    question = question.replace('\r\n','\n').strip()
+    if not 1 <= len(question) <= 4000:
+        return JSONResponse({'error':'Bitte eine Frage mit höchstens 4000 Zeichen eingeben.'},status_code=400)
+    try:
+        answer = request.app.state.service.chat(run_id,section_id,question)
+    except KeyError:
+        return JSONResponse({'error':'Abschnitt nicht gefunden.'},status_code=404)
+    except Temporary as exc:
+        return JSONResponse({'error':str(exc)},status_code=503)
+    return {'question':question,'answer_html':render_chat(answer)}
 
 
 @app.get('/api/runs/{run_id}/status')

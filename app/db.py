@@ -44,6 +44,10 @@ class Store:
                 UNIQUE(run_id,position));
             CREATE TABLE IF NOT EXISTS work_lock (id INTEGER PRIMARY KEY CHECK(id=1), kind TEXT NOT NULL, run_id INTEGER);
             CREATE TABLE IF NOT EXISTS probes (id INTEGER PRIMARY KEY, created TEXT NOT NULL, config TEXT NOT NULL, results TEXT NOT NULL, success INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS transcripts (section_id INTEGER PRIMARY KEY REFERENCES sections(id), text TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY, section_id INTEGER NOT NULL REFERENCES sections(id),
+                role TEXT NOT NULL, content TEXT NOT NULL, created TEXT NOT NULL, audit TEXT);
             ''')
         self.path.chmod(0o600)
 

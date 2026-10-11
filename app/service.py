@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qsl, urlencode
 from .db import now
-from .providers import YouTube, Transcripts, OpenRouter, Links, Temporary, Unavailable, source_urls
+from .providers import YouTube, Transcripts, OpenRouter, Links, Temporary, ContextTooLong, Unavailable, source_urls
 
 
 def probe_config(config):
@@ -94,7 +94,7 @@ class Service:
                         summary = llm.summarize_video(item['title'], text)
                     summary = re.sub(r'^#{1,2} ', '### ', summary, flags=re.MULTILINE)
                     body = 'Video-ID: ' + item['video_id'] + '\n\n' + summary + links.result()
-                    video_sections.append((item['title'].replace('\n', ' '), body))
+                    video_sections.append((item['title'].replace('\n', ' '), body, text))
                     status = 'success'
                 except Unavailable as exc:
                     status, reason = 'unavailable', str(exc)
@@ -107,7 +107,7 @@ class Service:
                                    (status,reason,target,item['id']))
             counts = self.store.run(run_id)['counts']
             markdown = '# Video-Zusammenfassungen\n'
-            for title, body in video_sections:
+            for title, body, _ in video_sections:
                 markdown += '\n## ' + title + '\n\n' + body + '\n'
             if not video_sections:
                 markdown += '\nEs konnte kein Video inhaltlich ausgewertet werden.\n'
@@ -117,9 +117,10 @@ class Service:
             snapshot = json.loads(self.store.run(run_id)['config'])
             snapshot.update({'model_calls': llm.audit, 'youtube_quota_estimate': yt.units})
             with self.store.connect() as db:
-                for position, (title, body) in enumerate(video_sections):
-                    db.execute('INSERT INTO sections(run_id,position,title,markdown) VALUES (?,?,?,?)',
-                               (run_id,position,title.strip(),body.strip()))
+                for position, (title, body, text) in enumerate(video_sections):
+                    section_id = db.execute('INSERT INTO sections(run_id,position,title,markdown) VALUES (?,?,?,?)',
+                               (run_id,position,title.strip(),body.strip())).lastrowid
+                    db.execute('INSERT INTO transcripts(section_id,text) VALUES (?,?)', (section_id,text))
                 db.execute("UPDATE runs SET status='ready',markdown=?,config=? WHERE id=?",
                            (markdown,json.dumps(snapshot,ensure_ascii=False),run_id))
         except Exception as exc:
@@ -133,6 +134,45 @@ class Service:
         if self.store.run(run_id)['status'] == 'ready':
             self.confirm(run_id)
             self.archive(run_id)
+
+    def chat(self, run_id, section_id, question):
+        rows = self.store.query('SELECT * FROM sections WHERE id=? AND run_id=?', (section_id, run_id))
+        if not rows:
+            raise KeyError(section_id)
+        section = rows[0]
+        c = self.store.settings()
+        c['openrouter_key'] = os.environ.get('OPENROUTER_API_KEY', '')
+        if not c.get('model') or not c['openrouter_key']:
+            raise Temporary('Für den Chat zuerst im Setup ein Modell speichern und OPENROUTER_API_KEY setzen.')
+        stored = self.store.query('SELECT text FROM transcripts WHERE section_id=?', (section_id,))
+        if not stored:
+            found = re.match(r'Video-ID: ([A-Za-z0-9_-]{11})\n', section['markdown'])
+            if not found:
+                raise Temporary('Zu diesem Abschnitt ist kein Video hinterlegt; ein Chat ist nicht möglich.')
+            try:
+                text, _ = Transcripts(c.get('transcript_mode', ''), self.directory).fetch(found[1])
+            except (Temporary, Unavailable) as exc:
+                raise Temporary('Transkript konnte nicht nachgeladen werden: ' + str(exc))
+            self.store.execute('INSERT OR IGNORE INTO transcripts(section_id,text) VALUES (?,?)', (section_id, text))
+            stored = self.store.query('SELECT text FROM transcripts WHERE section_id=?', (section_id,))
+        turns = self.store.query('SELECT role,content FROM chat_messages WHERE section_id=? ORDER BY id DESC LIMIT 20', (section_id,))[::-1]
+        material = ('Titel: ' + section['title'] + '\n\nZusammenfassung:\n' + section['markdown']
+                    + '\n\nTranskript:\n' + stored[0]['text'])
+        llm = self.llm_factory(c)
+        try:
+            answer = llm.chat(material, turns, question)
+        except ContextTooLong:
+            raise Temporary('Das Video ist zu lang für das Kontextfenster des eingestellten Modells. Im Setup ein Modell mit größerem Kontextfenster wählen.')
+        finally:
+            llm.close()
+        if not isinstance(answer, str) or not answer.strip():
+            raise Temporary('Das Modell hat keine verwertbare Antwort geliefert. Bitte erneut fragen.')
+        answer = answer.strip()
+        with self.store.connect() as db:
+            db.execute('INSERT INTO chat_messages(section_id,role,content,created) VALUES (?,?,?,?)', (section_id, 'user', question, now()))
+            db.execute('INSERT INTO chat_messages(section_id,role,content,created,audit) VALUES (?,?,?,?,?)',
+                       (section_id, 'assistant', answer, now(), json.dumps(llm.audit)))
+        return answer
 
     def resource_links(self, yt, llm, item, text):
         # Link lookup is best effort; a failure never costs the video its summary.
