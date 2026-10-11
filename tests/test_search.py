@@ -169,3 +169,24 @@ def test_page_text_keeps_title_meta_and_structured_data_but_drops_scripts_and_st
     assert text.startswith('NVIDIA Director of Robotics') and 'Jim Fan (@DrJimFan) / X' in text
     assert '{"name":"Jim Fan"}' in text and 'Posts & replies' in text
     assert 'tracking' not in text and ':root' not in text
+
+
+def test_search_hit_is_picked_by_decision_model_with_text_model_fallback(monkeypatch):
+    hits = [{'url':'https://other.example/','title':'Other','content':''},
+            {'url':'https://project.example/','title':'Project','content':'Official site'}]
+    monkeypatch.setattr('app.providers.searxng_search', lambda resource: hits)
+    class Decider:
+        config = {'search_engine':'searxng'}
+        chances = {'1':.1,'2':.8,'none':.1}
+        def decide(self, state, instructions, criteria):
+            assert criteria['2'] == 'https://project.example/' and 'none' in criteria
+            return self.chances
+        def call(self, prompt, **kwargs): raise AssertionError('Must not ask the text model')
+    llm = Decider()
+    assert Links(llm).search({'name':'Project'}) == ('https://project.example/', 'Project\nOfficial site')
+    llm.chances = {'1':.1,'2':.2,'none':.7}
+    assert Links(llm).search({'name':'Project'}) == ('', '')
+    class Unavailable(Decider):
+        def decide(self, *args): raise Temporary('Alpha endpoint changed')
+        def call(self, prompt, **kwargs): return {'url':'https://other.example/'}
+    assert Links(Unavailable()).search({'name':'Project'})[0] == 'https://other.example/'
