@@ -213,6 +213,19 @@ def test_search_without_tool_execution_cannot_return_candidate():
     finally: llm.close()
 
 
+def test_rate_limited_model_call_is_retried(monkeypatch):
+    import httpx
+    monkeypatch.setattr('app.providers.time.sleep', lambda seconds: None)
+    answers = [httpx.Response(429, headers={'retry-after':'1'}),
+               httpx.Response(200, json={'choices':[{'finish_reason':'stop','message':{'content':'{"ok":true}'}}]})]
+    llm = OpenRouter({'model':'fake','openrouter_key':'fake'})
+    llm.client.close()
+    llm.client = httpx.Client(transport=httpx.MockTransport(lambda request: answers.pop(0)))
+    try:
+        assert llm.call('Prompt') == {'ok':True} and not answers
+    finally: llm.close()
+
+
 def test_json_answer_wrapped_in_code_fence_and_prose_is_parsed():
     import httpx
     llm = OpenRouter({'model':'fake','openrouter_key':'fake'})

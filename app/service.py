@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qsl, urlencode
 from .db import now
@@ -86,9 +87,12 @@ class Service:
                 status, reason = 'temporary', ''
                 try:
                     text, _ = transcripts.fetch(item['video_id'])
-                    summary = llm.summarize_video(item['title'], text)
+                    # Summary and link lookup only share the transcript, so they run side by side.
+                    with ThreadPoolExecutor(max_workers=1) as pool:
+                        links = pool.submit(self.resource_links, yt, llm, item, text)
+                        summary = llm.summarize_video(item['title'], text)
                     summary = re.sub(r'^#{1,2} ', '### ', summary, flags=re.MULTILINE)
-                    body = 'Video-ID: ' + item['video_id'] + '\n\n' + summary + self.resource_links(yt, llm, item, text)
+                    body = 'Video-ID: ' + item['video_id'] + '\n\n' + summary + links.result()
                     video_sections.append((item['title'].replace('\n', ' '), body))
                     status = 'success'
                 except Unavailable as exc:
@@ -137,8 +141,9 @@ class Service:
             meta['creator_comments'] = comments
             # Description and creator comments only supply exact URLs for resources the video itself names.
             allowed = {clean_url(u) for u in source_urls(text + '\n' + meta['description'] + '\n' + '\n'.join(comments))}
-            links = [Links(llm, yt).verify({**r, 'url': clean_url(str(r.get('url', '')))}, allowed)
-                     for r in llm.resources(text, meta)]
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                links = list(pool.map(lambda r: Links(llm, yt).verify({**r, 'url': clean_url(str(r.get('url', '')))}, allowed),
+                                      llm.resources(text, meta)))
         except Exception:
             return ''
         lines, seen = [], set()

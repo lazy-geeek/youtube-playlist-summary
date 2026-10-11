@@ -4,6 +4,7 @@ import json
 import os
 import re
 import socket
+import threading
 import time
 from urllib.parse import urlsplit, urljoin
 import httpx
@@ -265,10 +266,10 @@ class OpenRouter:
     def close(self):
         self.client.close()
 
-    def call(self, prompt, *, search=False, json_output=True, system_prompt=None, temperature=.2):
+    def call(self, prompt, *, search=False, json_output=True, system_prompt=None):
         body = {'model': self.config['model'], 'messages': [
             {'role': 'system', 'content': system_prompt or SYSTEM}, {'role': 'user', 'content': prompt}],
-            'temperature': temperature, 'max_tokens': 9000}
+            'max_tokens': 9000}
         if json_output:
             body['response_format'] = {'type': 'json_object'}
         if search:
@@ -276,8 +277,13 @@ class OpenRouter:
                 'engine': self.config.get('search_engine', 'auto'), 'max_results': 5, 'max_uses': 2}}]
             body['max_tool_calls'] = 3
         try:
-            r = self.client.post('https://openrouter.ai/api/v1/chat/completions', json=body,
-                                 headers={'Authorization': 'Bearer ' + self.config['openrouter_key']})
+            for attempt in range(3):
+                r = self.client.post('https://openrouter.ai/api/v1/chat/completions', json=body,
+                                     headers={'Authorization': 'Bearer ' + self.config['openrouter_key']})
+                if r.status_code != 429 or attempt == 2:
+                    break
+                # Parallel link checks can hit the provider's rate limit; wait as told and retry.
+                time.sleep(min(float(r.headers.get('retry-after', 5)), 30))
             if not r.is_success:
                 raise Temporary(f'OpenRouter-Anfrage fehlgeschlagen ({r.status_code}).')
             data = r.json()
@@ -327,7 +333,7 @@ class OpenRouter:
             'Bei einem GitHub-Projekt ohne URL in den Daten als url die Repository-Adresse '
             'https://github.com/owner/repo angeben, sofern sicher bekannt; sie wird anschließend geprüft. '
             'Ohne Verweis resources leer.\n'
-            + json.dumps({'transcript': transcript, 'metadata': metadata}, ensure_ascii=False), temperature=0)
+            + json.dumps({'transcript': transcript, 'metadata': metadata}, ensure_ascii=False))
         resources = data.get('resources') if isinstance(data, dict) else None
         if not isinstance(resources, list):
             raise Temporary('Ungültige Struktur der Ressourcenliste.')
@@ -396,6 +402,10 @@ def searxng_search(resource):
         raise Temporary('SearXNG-Suche derzeit nicht verfügbar.')
 
 
+# Resources are checked in parallel; search engines behind SearXNG block rapid series of queries.
+SEARCH_SLOTS = threading.BoundedSemaphore(2)
+
+
 class Links:
     def __init__(self, llm, yt=None):
         self.llm = llm
@@ -420,7 +430,8 @@ class Links:
         # Returns the chosen address and the search engine's own entry for it.
         try:
             if self.llm.config.get('search_engine') == 'searxng':
-                results = searxng_search(resource)
+                with SEARCH_SLOTS:
+                    results = searxng_search(resource)
                 found = self.llm.call('Wähle den Suchtreffer, der am wahrscheinlichsten die offizielle Seite oder das '
                     'Repository des konkreten Projekts ist; er wird anschließend unabhängig geprüft. Start- oder '
                     'Hauptseite vor Unterseiten und einzelnen Artikeln bevorzugen. Nur leer, wenn kein '
