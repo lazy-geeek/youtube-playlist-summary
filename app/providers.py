@@ -304,7 +304,7 @@ class OpenRouter:
             raise Temporary('Modellantwort ungültig oder Verbindung unterbrochen.')
 
     def decide(self, state, instructions, criteria):
-        # OpenRouter's Decisions endpoint answers with a choice instead of text. It is alpha, so callers fall back.
+        # OpenRouter's Decisions endpoint answers with probabilities per option instead of text. It is alpha, so callers fall back.
         model = os.environ.get('OPENROUTER_DECISIONS_MODEL', 'openai/gpt-6-luna-decisions').strip()
         if not model:
             raise Temporary('Entscheidungsmodell abgeschaltet.')
@@ -315,10 +315,10 @@ class OpenRouter:
             if not r.is_success:
                 raise Temporary(f'OpenRouter-Entscheidung fehlgeschlagen ({r.status_code}).')
             data = r.json()
-            choice = data['answers']['decision']['choice']
+            probabilities = {k: float(v) for k, v in data['answers']['decision']['probabilities'].items()}
             self.audit.append({'id': data.get('id'), 'model': data.get('model'), 'usage': data.get('usage'),
                                'search': False, 'annotations': []})
-            return choice
+            return probabilities
         except Temporary:
             raise
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
@@ -380,6 +380,16 @@ def public_url(url):
     return p, ips[0]
 
 
+def page_text(markup):
+    # Title and meta descriptions first; scripts and styles would otherwise bury the visible text.
+    metas = [m for tag in re.findall(r'(?is)<meta\b[^>]*>', markup)
+             if re.search(r'(?i)(?:name|property)=["\'](?:description|og:title|og:description|og:site_name)["\']', tag)
+             for m in re.findall(r'(?is)content=["\']([^"\']*)', tag)]
+    body = re.sub(r'(?is)<(script(?![^>]*ld\+json)|style|noscript|svg)\b.*?</(?:script|style|noscript|svg)>', ' ', markup)
+    text = html.unescape(' '.join(metas) + ' ' + re.sub('<[^>]+>', ' ', body))
+    return re.sub(r'\s+', ' ', text).strip()[:18000]
+
+
 def fetch_page(url):
     for _ in range(4):
         p, ip = public_url(url)
@@ -394,9 +404,7 @@ def fetch_page(url):
                 continue
             if r.status != 200:
                 raise ValueError('Ziel nicht abrufbar.')
-            raw = r.read(200000)
-            text = html.unescape(re.sub('<[^>]+>', ' ', raw.decode('utf-8', errors='replace')))
-            return url, re.sub(r'\s+', ' ', text)[:18000]
+            return url, page_text(r.read(200000).decode('utf-8', errors='replace'))
         finally:
             pool.close()
     raise ValueError('Zu viele Weiterleitungen.')
@@ -512,10 +520,15 @@ class Links:
                     canonical, evidence = candidate, 'Seite nicht abrufbar. Eintrag der Suchmaschine: ' + entry
             state = {'resource': resource, 'candidate': canonical, 'page': evidence}
             try:
-                verified, reason = self.llm.decide(state, IDENTITY, IDENTITY_CRITERIA) == 'same', ''
+                same = self.llm.decide(state, IDENTITY, IDENTITY_CRITERIA).get('same', 0)
             except (Temporary, AttributeError):
+                same = .5
+            if .3 < same < .7:
+                # Unclear or unavailable: the text model weighs the evidence.
                 verdict = self.verdict(state)
                 verified, reason = verdict.get('verified') is True, str(verdict.get('reason', ''))[:2000]
+            else:
+                verified, reason = same >= .7, ''
             if verified:
                 return {**resource, 'url': canonical, 'verified': True, 'reason': reason, 'evidence': evidence}
         except Exception:

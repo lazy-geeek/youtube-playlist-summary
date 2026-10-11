@@ -128,16 +128,19 @@ def test_identity_uses_decision_endpoint_and_falls_back_to_model_verdict(monkeyp
         config = {}
         def decide(self, state, instructions, criteria):
             assert state['candidate'] == 'https://example.com/project' and set(criteria) == {'same','different','unclear'}
-            return self.choice
+            return {'same':self.same,'different':1 - self.same}
         def call(self, prompt, **kwargs): raise AssertionError('Must not ask the text model')
     llm = Decider()
-    llm.choice = 'same'
+    llm.same = .9
     assert Links(llm).check({'name':'Project'}, 'https://example.com/project')['verified']
-    llm.choice = 'unclear'
+    llm.same = .1
     assert not Links(llm).check({'name':'Project'}, 'https://example.com/project')
-    class Unavailable(Decider):
-        def decide(self, *args): raise Temporary('Alpha endpoint changed')
+    class Borderline(Decider):
+        same = .5
         def call(self, prompt, **kwargs): return {'verified':True,'reason':'Name matches'}
+    assert Links(Borderline()).check({'name':'Project'}, 'https://example.com/project')['reason'] == 'Name matches'
+    class Unavailable(Borderline):
+        def decide(self, *args): raise Temporary('Alpha endpoint changed')
     assert Links(Unavailable()).check({'name':'Project'}, 'https://example.com/project')['reason'] == 'Name matches'
 
 
@@ -152,7 +155,17 @@ def test_decide_is_on_by_default_and_can_be_switched_off(monkeypatch):
     llm.client = httpx.Client(transport=httpx.MockTransport(answer))
     try:
         monkeypatch.delenv('OPENROUTER_DECISIONS_MODEL', raising=False)
-        assert llm.decide({}, 'Decide', {'same':'Same'}) == 'same' and llm.audit[-1]['model'] == 'decider'
+        assert llm.decide({}, 'Decide', {'same':'Same'}) == {'same':.9} and llm.audit[-1]['model'] == 'decider'
         monkeypatch.setenv('OPENROUTER_DECISIONS_MODEL', '')
         with pytest.raises(Temporary): llm.decide({}, 'Decide', {'same':'Same'})
     finally: llm.close()
+
+
+def test_page_text_keeps_title_meta_and_structured_data_but_drops_scripts_and_styles():
+    from app.providers import page_text
+    text = page_text('<html><head><title>Jim Fan (@DrJimFan) / X</title><style>:root{color:#fff}</style>'
+        '<meta content="NVIDIA Director of Robotics" property="og:description"><script>var tracking = 1</script>'
+        '<script type="application/ld+json">{"name":"Jim Fan"}</script></head><body><p>Posts &amp; replies</p></body></html>')
+    assert text.startswith('NVIDIA Director of Robotics') and 'Jim Fan (@DrJimFan) / X' in text
+    assert '{"name":"Jim Fan"}' in text and 'Posts & replies' in text
+    assert 'tracking' not in text and ':root' not in text
