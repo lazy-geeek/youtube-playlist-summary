@@ -305,9 +305,9 @@ class OpenRouter:
 
     def decide(self, state, instructions, criteria):
         # OpenRouter's Decisions endpoint answers with a choice instead of text. It is alpha, so callers fall back.
-        model = os.environ.get('OPENROUTER_DECISIONS_MODEL', '').strip()
+        model = os.environ.get('OPENROUTER_DECISIONS_MODEL', 'openai/gpt-6-luna-decisions').strip()
         if not model:
-            raise Temporary('Kein Entscheidungsmodell konfiguriert.')
+            raise Temporary('Entscheidungsmodell abgeschaltet.')
         try:
             r = self.client.post('https://openrouter.ai/api/alpha/decisions', json={'model': model, 'state': state,
                                  'questions': {'decision': {'type': 'choice', 'instructions': instructions, 'criteria': criteria}}},

@@ -59,7 +59,7 @@ Die App ist unter `http://localhost:8765` erreichbar. Benutzername und Passwort 
 | `APIFY_TRANSCRIPT_LANGUAGE` | Bevorzugte Untertitelsprache; Standard `en` |
 | `APIFY_TRANSCRIPT_ACTOR` | Actor-ID; unterstützt: `starvibe/youtube-video-transcript` |
 | `SEARXNG_URL` | Basis-URL der eigenen SearXNG-Instanz; im Setup Suchdienst `searxng` wählen, JSON-API erforderlich |
-| `OPENROUTER_DECISIONS_MODEL` | Optional; Modell der OpenRouter-Decisions-Schnittstelle (Alpha), z. B. `openai/gpt-6-luna-decisions`. Prüft die Identität verlinkter Ressourcen deutlich schneller; ohne Angabe oder bei Ausfall prüft das Modell aus dem Setup |
+| `OPENROUTER_DECISIONS_MODEL` | Modell der OpenRouter-Decisions-Schnittstelle (Alpha) für die Identitätsprüfung verlinkter Ressourcen; Standard `openai/gpt-6-luna-decisions`. Leer gesetzt oder bei Ausfall prüft das Modell aus dem Setup |
 | `GITHUB_TOKEN` | Optional; hebt das Limit der GitHub-API für die Prüfung von Repository-Links von 60 auf 5.000 Abfragen pro Stunde. Ein Token ohne Berechtigungen genügt |
 | `GOOGLE_ALLOWED_EMAIL` | Optionale Vorbelegung der berechtigten Google-Adresse im Setup |
 

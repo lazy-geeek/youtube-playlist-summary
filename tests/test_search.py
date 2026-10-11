@@ -141,7 +141,7 @@ def test_identity_uses_decision_endpoint_and_falls_back_to_model_verdict(monkeyp
     assert Links(Unavailable()).check({'name':'Project'}, 'https://example.com/project')['reason'] == 'Name matches'
 
 
-def test_decide_needs_configured_model_and_reads_choice(monkeypatch):
+def test_decide_is_on_by_default_and_can_be_switched_off(monkeypatch):
     import httpx
     from app.providers import OpenRouter
     llm = OpenRouter({'model':'fake','openrouter_key':'fake'})
@@ -152,7 +152,7 @@ def test_decide_needs_configured_model_and_reads_choice(monkeypatch):
     llm.client = httpx.Client(transport=httpx.MockTransport(answer))
     try:
         monkeypatch.delenv('OPENROUTER_DECISIONS_MODEL', raising=False)
-        with pytest.raises(Temporary): llm.decide({}, 'Decide', {'same':'Same'})
-        monkeypatch.setenv('OPENROUTER_DECISIONS_MODEL', 'decider')
         assert llm.decide({}, 'Decide', {'same':'Same'}) == 'same' and llm.audit[-1]['model'] == 'decider'
+        monkeypatch.setenv('OPENROUTER_DECISIONS_MODEL', '')
+        with pytest.raises(Temporary): llm.decide({}, 'Decide', {'same':'Same'})
     finally: llm.close()
